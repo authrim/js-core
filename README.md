@@ -15,6 +15,8 @@ Platform-agnostic OIDC/OAuth 2.0 SDK for JavaScript and TypeScript.
 
 ## Installation
 
+### Package Manager
+
 ```bash
 npm install @authrim/core
 # or
@@ -25,58 +27,134 @@ yarn add @authrim/core
 
 ### CDN
 
-ES Modules:
-
-```html
-<script type="module">
-  import { createAuthrimClient } from 'https://esm.sh/@authrim/core';
-  // or
-  import { createAuthrimClient } from 'https://cdn.jsdelivr.net/npm/@authrim/core/+esm';
-</script>
-```
-
-UMD (global `Authrim`):
-
-```html
-<script src="https://unpkg.com/@authrim/core/dist/index.global.js"></script>
-<script>
-  const { createAuthrimClient } = Authrim;
-</script>
-```
+| Type | URL |
+|------|-----|
+| ESM | `https://esm.sh/@authrim/core` |
+| ESM | `https://cdn.jsdelivr.net/npm/@authrim/core/+esm` |
+| UMD | `https://unpkg.com/@authrim/core/dist/index.global.js` |
 
 ## Quick Start
+
+### ESM (TypeScript / Modern JavaScript)
 
 ```typescript
 import { createAuthrimClient } from '@authrim/core';
 
-// Create client with platform-specific providers
 const client = await createAuthrimClient({
   issuer: 'https://your-idp.com',
   clientId: 'your-client-id',
   scopes: ['openid', 'profile', 'email'],
-  // Inject platform-specific providers
   crypto: yourCryptoProvider,
   storage: yourStorageProvider,
   http: yourHttpProvider,
 });
 
-// Build authorization URL
-const { url, state } = await client.buildAuthorizationUrl({
+// Start login
+const { url } = await client.buildAuthorizationUrl({
   redirectUri: 'https://your-app.com/callback',
 });
-
-// Redirect user to IdP
 window.location.href = url;
-```
 
-### Handle Callback
-
-```typescript
-// After redirect back from IdP
+// Handle callback (on redirect back)
 const tokens = await client.handleCallback(window.location.href);
-
 console.log('Authenticated!', tokens.accessToken);
 ```
+
+### UMD (Browser Script Tag)
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Authrim Example</title>
+</head>
+<body>
+  <button id="login">Login</button>
+  <button id="logout" style="display:none">Logout</button>
+  <pre id="user"></pre>
+
+  <script src="https://unpkg.com/@authrim/core/dist/index.global.js"></script>
+  <script>
+    const { createAuthrimClient } = Authrim;
+
+    // Browser providers
+    const cryptoProvider = {
+      getRandomBytes: (len) => crypto.getRandomValues(new Uint8Array(len)),
+      sha256: async (data) => {
+        const enc = new TextEncoder().encode(data);
+        const buf = await crypto.subtle.digest('SHA-256', enc);
+        return new Uint8Array(buf);
+      }
+    };
+
+    const storageProvider = {
+      get: async (key) => localStorage.getItem(key),
+      set: async (key, value) => localStorage.setItem(key, value),
+      remove: async (key) => localStorage.removeItem(key)
+    };
+
+    const httpProvider = {
+      fetch: async (url, options = {}) => {
+        const res = await fetch(url, {
+          method: options.method || 'GET',
+          headers: options.headers,
+          body: options.body
+        });
+        return {
+          ok: res.ok,
+          status: res.status,
+          data: await res.json()
+        };
+      }
+    };
+
+    // Initialize client
+    (async () => {
+      const client = await createAuthrimClient({
+        issuer: 'https://your-idp.com',
+        clientId: 'your-client-id',
+        scopes: ['openid', 'profile', 'email'],
+        crypto: cryptoProvider,
+        storage: storageProvider,
+        http: httpProvider
+      });
+
+      // Handle callback
+      if (window.location.search.includes('code=')) {
+        const tokens = await client.handleCallback(window.location.href);
+        history.replaceState({}, '', window.location.pathname);
+      }
+
+      // Update UI
+      const isAuth = await client.isAuthenticated();
+      document.getElementById('login').style.display = isAuth ? 'none' : 'block';
+      document.getElementById('logout').style.display = isAuth ? 'block' : 'none';
+
+      if (isAuth) {
+        const user = await client.getUser();
+        document.getElementById('user').textContent = JSON.stringify(user, null, 2);
+      }
+
+      // Login button
+      document.getElementById('login').onclick = async () => {
+        const { url } = await client.buildAuthorizationUrl({
+          redirectUri: window.location.origin + window.location.pathname
+        });
+        window.location.href = url;
+      };
+
+      // Logout button
+      document.getElementById('logout').onclick = async () => {
+        await client.logout();
+        window.location.reload();
+      };
+    })();
+  </script>
+</body>
+</html>
+```
+
+## Usage
 
 ### Token Management
 
@@ -101,14 +179,12 @@ const result = await client.token.exchange({
   audience: 'https://api.other-service.com',
   scope: 'read write',
 });
-
 console.log(result.tokens.accessToken);
 ```
 
 ### Session Management
 
 ```typescript
-// Check session with authorization server
 const sessionStatus = await client.session.check();
 
 if (!sessionStatus.active) {
@@ -131,48 +207,35 @@ const { logoutUrl } = await client.logout({
 ### Events
 
 ```typescript
-// Subscribe to token refresh
 client.on('token:refreshed', ({ tokens }) => {
-  console.log('Token refreshed:', tokens.accessToken);
+  console.log('Token refreshed');
 });
 
-// Subscribe to token exchange
 client.on('token:exchanged', ({ tokens, issuedTokenType }) => {
   console.log('Token exchanged:', issuedTokenType);
 });
 
-// Subscribe to errors
 client.on('token:error', ({ error }) => {
-  console.error('Token error:', error.code, error.message);
+  console.error('Token error:', error.code);
 });
 ```
 
 ## Providers
 
-`@authrim/core` requires platform-specific providers to be injected:
-
-### CryptoProvider
+`@authrim/core` requires platform-specific providers:
 
 ```typescript
 interface CryptoProvider {
   getRandomBytes(length: number): Uint8Array;
   sha256(data: string): Promise<Uint8Array>;
 }
-```
 
-### StorageProvider
-
-```typescript
 interface AuthrimStorage {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
   remove(key: string): Promise<void>;
 }
-```
 
-### HttpProvider
-
-```typescript
 interface HttpClient {
   fetch<T>(url: string, options?: HttpRequestOptions): Promise<HttpResponse<T>>;
 }
@@ -188,8 +251,6 @@ For Native SSO device_secret verification:
 import { calculateDsHash } from '@authrim/core';
 
 const dsHash = await calculateDsHash(deviceSecret, cryptoProvider);
-
-// Compare with id_token.ds_hash claim
 if (idToken.ds_hash === dsHash) {
   // device_secret is valid
 }
@@ -200,13 +261,8 @@ if (idToken.ds_hash === dsHash) {
 ```typescript
 import { decodeJwt, decodeIdToken, isJwtExpired } from '@authrim/core';
 
-// Decode JWT without verification
 const decoded = decodeJwt(token);
-
-// Decode ID token
-const idTokenClaims = decodeIdToken(idToken);
-
-// Check if JWT is expired
+const claims = decodeIdToken(idToken);
 const expired = isJwtExpired(token);
 ```
 
@@ -214,32 +270,15 @@ const expired = isJwtExpired(token);
 
 ```typescript
 interface AuthrimClientConfig {
-  /** OIDC Issuer URL */
-  issuer: string;
-
-  /** OAuth Client ID */
-  clientId: string;
-
-  /** Requested scopes (default: ['openid']) */
-  scopes?: string[];
-
-  /** Platform-specific crypto provider */
-  crypto: CryptoProvider;
-
-  /** Platform-specific storage provider */
-  storage: AuthrimStorage;
-
-  /** Platform-specific HTTP client */
-  http: HttpClient;
-
-  /** Discovery cache TTL in ms (default: 3600000 = 1 hour) */
-  discoveryCacheTtlMs?: number;
-
-  /** Token refresh skew in seconds (default: 30) */
-  refreshSkewSeconds?: number;
-
-  /** State TTL in seconds (default: 600 = 10 minutes) */
-  stateTtlSeconds?: number;
+  issuer: string;                    // OIDC Issuer URL
+  clientId: string;                  // OAuth Client ID
+  scopes?: string[];                 // Default: ['openid']
+  crypto: CryptoProvider;            // Platform crypto
+  storage: AuthrimStorage;           // Platform storage
+  http: HttpClient;                  // Platform HTTP client
+  discoveryCacheTtlMs?: number;      // Default: 3600000 (1 hour)
+  refreshSkewSeconds?: number;       // Default: 30
+  stateTtlSeconds?: number;          // Default: 600 (10 min)
 }
 ```
 
