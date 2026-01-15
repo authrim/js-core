@@ -23,6 +23,27 @@ pnpm add @authrim/core
 yarn add @authrim/core
 ```
 
+### CDN
+
+ES Modules:
+
+```html
+<script type="module">
+  import { createAuthrimClient } from 'https://esm.sh/@authrim/core';
+  // or
+  import { createAuthrimClient } from 'https://cdn.jsdelivr.net/npm/@authrim/core/+esm';
+</script>
+```
+
+UMD (global `Authrim`):
+
+```html
+<script src="https://unpkg.com/@authrim/core/dist/index.global.js"></script>
+<script>
+  const { createAuthrimClient } = Authrim;
+</script>
+```
+
 ## Quick Start
 
 ```typescript
