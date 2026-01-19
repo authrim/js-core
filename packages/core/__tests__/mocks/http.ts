@@ -67,6 +67,7 @@ export function createMockDiscoveryDocument(issuer: string) {
     token_endpoint: `${issuer}/token`,
     userinfo_endpoint: `${issuer}/userinfo`,
     revocation_endpoint: `${issuer}/revoke`,
+    introspection_endpoint: `${issuer}/introspect`,
     end_session_endpoint: `${issuer}/logout`,
     jwks_uri: `${issuer}/.well-known/jwks.json`,
     response_types_supported: ['code'],

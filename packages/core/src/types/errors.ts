@@ -3,6 +3,39 @@
  */
 
 /**
+ * User action recommended for error recovery
+ */
+export type AuthrimErrorUserAction =
+  | 'retry'
+  | 'reauthenticate'
+  | 'contact_support'
+  | 'check_network'
+  | 'none';
+
+/**
+ * Error severity level
+ */
+export type AuthrimErrorSeverity = 'fatal' | 'error' | 'warning';
+
+/**
+ * Error metadata for recovery information
+ */
+export interface AuthrimErrorMeta {
+  /** Whether this is a transient error */
+  transient: boolean;
+  /** Whether automatic retry is possible */
+  retryable: boolean;
+  /** Suggested retry wait time in milliseconds */
+  retryAfterMs?: number;
+  /** Maximum number of retry attempts */
+  maxRetries?: number;
+  /** Recommended user action */
+  userAction: AuthrimErrorUserAction;
+  /** Error severity level */
+  severity: AuthrimErrorSeverity;
+}
+
+/**
  * Error codes used by the SDK
  */
 export type AuthrimErrorCode =
@@ -45,7 +78,23 @@ export type AuthrimErrorCode =
   | 'no_discovery'
   // Session errors
   | 'no_userinfo_endpoint'
-  | 'userinfo_error';
+  | 'userinfo_error'
+  // Token introspection/revocation errors
+  | 'introspection_error'
+  | 'revocation_error'
+  | 'no_introspection_endpoint'
+  | 'no_revocation_endpoint'
+  // Silent auth errors (OIDC prompt=none)
+  | 'login_required'
+  | 'interaction_required'
+  | 'consent_required'
+  | 'account_selection_required'
+  // Browser/Popup auth errors (@authrim/web)
+  | 'dom_not_ready'
+  | 'state_mismatch'
+  | 'popup_blocked'
+  | 'popup_closed'
+  | 'invalid_response';
 
 /**
  * Options for creating an AuthrimError
@@ -119,4 +168,351 @@ export class AuthrimError extends Error {
   isRetryable(): boolean {
     return this.code === 'network_error' || this.code === 'timeout_error';
   }
+
+  /**
+   * Get error metadata for recovery guidance
+   */
+  get meta(): AuthrimErrorMeta {
+    return getErrorMeta(this.code);
+  }
+}
+
+/**
+ * Error metadata mapping for each error code
+ */
+const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
+  // OAuth 2.0 / OIDC standard errors
+  invalid_request: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  unauthorized_client: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  access_denied: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  unsupported_response_type: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  invalid_scope: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  server_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 5000,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  temporarily_unavailable: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 10000,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  invalid_grant: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  invalid_token: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+
+  // SDK-specific errors
+  invalid_state: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  expired_state: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  invalid_nonce: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  nonce_mismatch: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  session_expired: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  session_check_failed: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 3000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  network_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 3,
+    userAction: 'check_network',
+    severity: 'error',
+  },
+  timeout_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 3000,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  discovery_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 5000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  discovery_mismatch: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  configuration_error: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  storage_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 1000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  flow_engine_error: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+
+  // Token errors
+  no_tokens: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  token_expired: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  token_error: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  refresh_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  token_exchange_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+
+  // Callback errors
+  oauth_error: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  missing_code: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  missing_state: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+
+  // Initialization errors
+  not_initialized: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'fatal',
+  },
+  no_discovery: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 3000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+
+  // Session errors
+  no_userinfo_endpoint: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  userinfo_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+
+  // Token introspection/revocation errors
+  introspection_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  revocation_error: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 2000,
+    maxRetries: 2,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  no_introspection_endpoint: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  no_revocation_endpoint: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+
+  // Silent auth errors
+  login_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  interaction_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  consent_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  account_selection_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+
+  // Browser/Popup auth errors (@authrim/web)
+  dom_not_ready: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 100,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  state_mismatch: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  popup_blocked: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  popup_closed: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  invalid_response: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+};
+
+/**
+ * Get error metadata for a given error code
+ */
+export function getErrorMeta(code: AuthrimErrorCode): AuthrimErrorMeta {
+  return ERROR_META_MAP[code];
 }

@@ -19,6 +19,12 @@ import {
   type AuthorizationUrlResult,
 } from '../auth/authorization-code.js';
 import { TokenManager } from '../token/manager.js';
+import {
+  TokenIntrospector,
+  type IntrospectionResponse,
+  type IntrospectTokenOptions,
+} from '../token/introspection.js';
+import { TokenRevoker, type RevokeTokenOptions } from '../token/revocation.js';
 import { LogoutHandler, type LogoutOptions, type LogoutResult } from '../session/logout.js';
 import { TokenApiClient } from '../session/token-api.js';
 import { SessionManager } from '../session/manager.js';
@@ -72,6 +78,12 @@ export class AuthrimClient {
 
   /** Session manager (initialized in initialize()) */
   private sessionManager!: SessionManager;
+
+  /** Token introspector */
+  private tokenIntrospector!: TokenIntrospector;
+
+  /** Token revoker */
+  private tokenRevoker!: TokenRevoker;
 
   /** Issuer hash for storage keys */
   private issuerHash!: string;
@@ -144,11 +156,24 @@ export class AuthrimClient {
     // Initialize logout handler
     this.logoutHandler = new LogoutHandler({
       storage: this.config.storage,
+      http: this.config.http,
       clientId: this.config.clientId,
       issuerHash: this.issuerHash,
       clientIdHash: this.clientIdHash,
       eventEmitter: this.events,
       endpoints: this.config.endpoints,
+    });
+
+    // Initialize token introspector
+    this.tokenIntrospector = new TokenIntrospector({
+      http: this.config.http,
+      clientId: this.config.clientId,
+    });
+
+    // Initialize token revoker
+    this.tokenRevoker = new TokenRevoker({
+      http: this.config.http,
+      clientId: this.config.clientId,
     });
 
     // Initialize token API client
@@ -319,6 +344,35 @@ export class AuthrimClient {
         // Ensure discovery is loaded
         await this.discover();
         return this.tokenManager.exchangeToken(request);
+      },
+
+      /**
+       * Introspect a token (RFC 7662)
+       *
+       * Validates a token server-side and returns its metadata.
+       * Useful for resource servers to validate access tokens.
+       *
+       * @param options - Introspection options (token and optional type hint)
+       * @returns Introspection response with token metadata
+       * @throws AuthrimError if introspection endpoint not available or request fails
+       */
+      introspect: async (options: IntrospectTokenOptions): Promise<IntrospectionResponse> => {
+        const discovery = await this.discover();
+        return this.tokenIntrospector.introspect(discovery, options);
+      },
+
+      /**
+       * Revoke a token (RFC 7009)
+       *
+       * Explicitly invalidates a token at the authorization server.
+       * Use this when you want to ensure a token can no longer be used.
+       *
+       * @param options - Revocation options (token and optional type hint)
+       * @throws AuthrimError if revocation endpoint not available or request fails
+       */
+      revoke: async (options: RevokeTokenOptions): Promise<void> => {
+        const discovery = await this.discover();
+        return this.tokenRevoker.revoke(discovery, options);
       },
     };
   }

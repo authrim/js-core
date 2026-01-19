@@ -39,9 +39,28 @@ export {
   type AuthorizationContext,
   type ExchangeCodeOptions,
 } from './auth/authorization-code.js';
+export {
+  SilentAuthHandler,
+  type SilentAuthOptions,
+  type SilentAuthUrlResult,
+  type SilentAuthResult,
+} from './auth/silent-auth.js';
 
 // Token
 export { TokenManager, type TokenManagerOptions } from './token/manager.js';
+export {
+  TokenIntrospector,
+  type TokenIntrospectorOptions,
+  type IntrospectionResponse,
+  type IntrospectTokenOptions,
+  type IntrospectionTokenTypeHint,
+} from './token/introspection.js';
+export {
+  TokenRevoker,
+  type TokenRevokerOptions,
+  type RevokeTokenOptions,
+  type TokenTypeHint,
+} from './token/revocation.js';
 
 // Session
 export {
@@ -75,7 +94,15 @@ export type {
 } from './events/types.js';
 
 // Types
-export { AuthrimError, type AuthrimErrorOptions, type AuthrimErrorCode } from './types/errors.js';
+export {
+  AuthrimError,
+  getErrorMeta,
+  type AuthrimErrorOptions,
+  type AuthrimErrorCode,
+  type AuthrimErrorMeta,
+  type AuthrimErrorUserAction,
+  type AuthrimErrorSeverity,
+} from './types/errors.js';
 export type {
   OIDCDiscoveryDocument,
   UserInfo,

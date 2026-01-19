@@ -6,10 +6,13 @@
  */
 
 import type { AuthrimStorage } from '../providers/storage.js';
+import type { HttpClient } from '../providers/http.js';
 import type { OIDCDiscoveryDocument } from '../types/oidc.js';
+import type { TokenSet } from '../types/token.js';
 import type { EventEmitter } from '../events/emitter.js';
 import type { EndpointOverrides } from '../client/config.js';
 import { STORAGE_KEYS } from '../auth/state.js';
+import { TokenRevoker } from '../token/revocation.js';
 
 /**
  * Logout options
@@ -21,6 +24,8 @@ export interface LogoutOptions {
   idTokenHint?: string;
   /** State parameter for post-logout redirect */
   state?: string;
+  /** Whether to revoke tokens before logout (requires revocation_endpoint) */
+  revokeTokens?: boolean;
 }
 
 /**
@@ -31,6 +36,17 @@ export interface LogoutResult {
   logoutUrl?: string;
   /** True if only local logout was performed (IdP doesn't support RP-Initiated Logout) */
   localOnly: boolean;
+  /** Token revocation result (if revokeTokens was true) */
+  revocation?: {
+    /** Whether revocation was attempted */
+    attempted: boolean;
+    /** Whether access token revocation succeeded */
+    accessTokenRevoked?: boolean;
+    /** Whether refresh token revocation succeeded */
+    refreshTokenRevoked?: boolean;
+    /** Error if revocation failed (logout still proceeds) */
+    error?: Error;
+  };
 }
 
 /**
@@ -39,6 +55,8 @@ export interface LogoutResult {
 export interface LogoutHandlerOptions {
   /** Storage provider */
   storage: AuthrimStorage;
+  /** HTTP client (for token revocation) */
+  http: HttpClient;
   /** Client ID */
   clientId: string;
   /** Issuer hash for storage keys */
@@ -61,6 +79,7 @@ export class LogoutHandler {
   private readonly clientIdHash: string;
   private readonly eventEmitter?: EventEmitter;
   private readonly endpoints?: EndpointOverrides;
+  private readonly tokenRevoker: TokenRevoker;
 
   constructor(options: LogoutHandlerOptions) {
     this.storage = options.storage;
@@ -69,14 +88,19 @@ export class LogoutHandler {
     this.clientIdHash = options.clientIdHash;
     this.eventEmitter = options.eventEmitter;
     this.endpoints = options.endpoints;
+    this.tokenRevoker = new TokenRevoker({
+      http: options.http,
+      clientId: options.clientId,
+    });
   }
 
   /**
    * Perform logout
    *
-   * 1. Clears local tokens (always)
-   * 2. Emits session:ended event
-   * 3. Builds logout URL if IdP supports end_session_endpoint
+   * 1. Optionally revokes tokens at the authorization server (if revokeTokens=true)
+   * 2. Clears local tokens (always)
+   * 3. Emits session:ended event
+   * 4. Builds logout URL if IdP supports end_session_endpoint
    *
    * @param discovery - OIDC discovery document
    * @param options - Logout options
@@ -86,8 +110,15 @@ export class LogoutHandler {
     discovery: OIDCDiscoveryDocument | null,
     options?: LogoutOptions
   ): Promise<LogoutResult> {
-    // Get stored ID token BEFORE clearing tokens (for logout URL)
+    // Get stored tokens BEFORE clearing (for revocation and logout URL)
     const storedIdToken = await this.getStoredIdToken();
+    const storedTokens = await this.getStoredTokens();
+
+    // Revoke tokens if requested
+    let revocationResult: LogoutResult['revocation'];
+    if (options?.revokeTokens && discovery?.revocation_endpoint && storedTokens) {
+      revocationResult = await this.revokeTokens(discovery, storedTokens);
+    }
 
     // Clear local tokens
     await this.clearTokens();
@@ -108,7 +139,7 @@ export class LogoutHandler {
 
     // If no end_session_endpoint, return local-only logout
     if (!endSessionEndpoint) {
-      return { localOnly: true };
+      return { localOnly: true, revocation: revocationResult };
     }
 
     // Build logout URL (use stored token if not provided in options)
@@ -131,7 +162,48 @@ export class LogoutHandler {
     return {
       logoutUrl: `${endSessionEndpoint}?${params.toString()}`,
       localOnly: false,
+      revocation: revocationResult,
     };
+  }
+
+  /**
+   * Revoke tokens at the authorization server
+   *
+   * Best-effort: if revocation fails, logout still proceeds
+   *
+   * @param discovery - OIDC discovery document
+   * @param tokens - Tokens to revoke
+   * @returns Revocation result
+   */
+  private async revokeTokens(
+    discovery: OIDCDiscoveryDocument,
+    tokens: TokenSet
+  ): Promise<NonNullable<LogoutResult['revocation']>> {
+    const result: NonNullable<LogoutResult['revocation']> = {
+      attempted: true,
+    };
+
+    try {
+      // Revoke refresh token first (if present) - this often invalidates access token too
+      if (tokens.refreshToken) {
+        await this.tokenRevoker.revoke(discovery, {
+          token: tokens.refreshToken,
+          tokenTypeHint: 'refresh_token',
+        });
+        result.refreshTokenRevoked = true;
+      }
+
+      // Revoke access token
+      await this.tokenRevoker.revoke(discovery, {
+        token: tokens.accessToken,
+        tokenTypeHint: 'access_token',
+      });
+      result.accessTokenRevoked = true;
+    } catch (error) {
+      result.error = error instanceof Error ? error : new Error(String(error));
+    }
+
+    return result;
   }
 
   /**
@@ -151,5 +223,21 @@ export class LogoutHandler {
   private async getStoredIdToken(): Promise<string | null> {
     const idTokenKey = STORAGE_KEYS.idToken(this.issuerHash, this.clientIdHash);
     return this.storage.get(idTokenKey);
+  }
+
+  /**
+   * Get stored tokens
+   */
+  private async getStoredTokens(): Promise<TokenSet | null> {
+    const tokenKey = STORAGE_KEYS.tokens(this.issuerHash, this.clientIdHash);
+    const stored = await this.storage.get(tokenKey);
+    if (!stored) {
+      return null;
+    }
+    try {
+      return JSON.parse(stored) as TokenSet;
+    } catch {
+      return null;
+    }
   }
 }

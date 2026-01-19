@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { LogoutHandler } from '../../src/session/logout.js';
 import { STORAGE_KEYS } from '../../src/auth/state.js';
 import { createMockStorage } from '../mocks/storage.js';
-import { createMockDiscoveryDocument } from '../mocks/http.js';
+import { createMockHttp, createMockDiscoveryDocument } from '../mocks/http.js';
 import { EventEmitter } from '../../src/events/emitter.js';
 
 describe('Logout Handler', () => {
@@ -19,14 +19,17 @@ describe('Logout Handler', () => {
   const clientIdHash = 'client-hash';
 
   let storage: ReturnType<typeof createMockStorage>;
+  let http: ReturnType<typeof createMockHttp>;
   let eventEmitter: EventEmitter;
   let logoutHandler: LogoutHandler;
 
   beforeEach(async () => {
     storage = createMockStorage();
+    http = createMockHttp();
     eventEmitter = new EventEmitter();
     logoutHandler = new LogoutHandler({
       storage,
+      http,
       clientId,
       issuerHash,
       clientIdHash,
@@ -113,6 +116,7 @@ describe('Logout Handler', () => {
     it('should respect endpoint override to disable logout', async () => {
       const handlerWithDisabledLogout = new LogoutHandler({
         storage,
+        http,
         clientId,
         issuerHash,
         clientIdHash,
@@ -132,6 +136,7 @@ describe('Logout Handler', () => {
       const customEndpoint = 'https://custom.auth.com/logout';
       const handlerWithOverride = new LogoutHandler({
         storage,
+        http,
         clientId,
         issuerHash,
         clientIdHash,
