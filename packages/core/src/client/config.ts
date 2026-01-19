@@ -99,8 +99,9 @@ export interface AuthrimClientConfig {
   /**
    * Enable Flow Engine (server-driven UI)
    *
-   * Default: true
-   * Set to false to use standard OIDC flows only.
+   * Default: false
+   * Set to true to enable server-driven UI flows.
+   * Note: Both SDK and server must have Flow Engine enabled for it to work.
    */
   flowEngine?: boolean;
 
@@ -150,7 +151,7 @@ export function resolveConfig(config: AuthrimClientConfig): ResolvedConfig {
   return {
     ...config,
     scopes: config.scopes ?? ['openid', 'profile'],
-    flowEngine: config.flowEngine ?? true,
+    flowEngine: config.flowEngine ?? false,
     discoveryCacheTtlMs: config.discoveryCacheTtlMs ?? 3600 * 1000,
     refreshSkewSeconds: config.refreshSkewSeconds ?? 30,
     stateTtlSeconds: config.stateTtlSeconds ?? 600,

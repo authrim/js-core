@@ -102,6 +102,10 @@ export interface OIDCDiscoveryDocument {
   /** Code challenge methods supported (OPTIONAL) */
   code_challenge_methods_supported?: string[];
 
+  // Flow Engine (Authrim extension)
+  /** Flow Engine support indicator (OPTIONAL, Authrim-specific) */
+  flow_engine_supported?: boolean;
+
   // Additional properties (vendor-specific)
   [key: string]: unknown;
 }
