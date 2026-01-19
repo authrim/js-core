@@ -41,6 +41,10 @@
     "url": "https://github.com/authrim/js-core.git",
     "directory": "packages/core"
   },
+  "homepage": "https://github.com/authrim/js-core#readme",
+  "bugs": {
+    "url": "https://github.com/authrim/js-core/issues"
+  },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "eslint": "^8.56.0",

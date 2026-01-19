@@ -52,3 +52,19 @@ temp/
 
 # Package tarballs
 *.tgz
+
+# Claude Code
+.claude/
+
+# npm/yarn auth
+.npmrc
+.yarnrc.yml
+
+# Secrets
+secrets/
+*.pem
+*.key
+
+# Misc
+*.bak
+*.backup
