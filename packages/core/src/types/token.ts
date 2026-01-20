@@ -45,13 +45,6 @@ export interface TokenEndpointResponse {
 export type TokenResponse = TokenEndpointResponse;
 
 /**
- * Refresh token endpoint response (raw)
- */
-export interface RefreshTokenResponse extends TokenEndpointResponse {
-  // Refresh token rotation may return a new refresh token
-}
-
-/**
  * Token exchange request (RFC 8693)
  */
 export interface TokenExchangeRequest {
@@ -103,21 +96,4 @@ export interface TokenExchangeResult {
   tokens: TokenSet;
   /** Issued token type URI */
   issuedTokenType: TokenTypeUri | string;
-}
-
-/**
- * Convert raw token response to TokenSet
- */
-export function toTokenSet(response: TokenEndpointResponse): TokenSet {
-  const now = Math.floor(Date.now() / 1000);
-  const expiresIn = response.expires_in ?? 3600; // Default 1 hour
-
-  return {
-    accessToken: response.access_token,
-    refreshToken: response.refresh_token,
-    idToken: response.id_token,
-    tokenType: 'Bearer',
-    expiresAt: now + expiresIn,
-    scope: response.scope,
-  };
 }

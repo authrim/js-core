@@ -20,7 +20,7 @@ export {
 export { DiscoveryClient, normalizeIssuer } from './client/discovery.js';
 
 // Provider interfaces
-export { type HttpClient, type HttpOptions, type HttpResponse } from './providers/http.js';
+export { type HttpClient, type HttpOptions, type HttpResponse, type OAuthErrorResponse } from './providers/http.js';
 export { type CryptoProvider } from './providers/crypto.js';
 export { type AuthrimStorage } from './providers/storage.js';
 
@@ -135,3 +135,70 @@ export {
   type DecodedJwt,
 } from './utils/jwt.js';
 export { calculateDsHash } from './utils/hash.js';
+export { timingSafeEqual } from './utils/timing-safe.js';
+
+// Direct Auth
+export type {
+  // WebAuthn Types
+  AuthenticatorTransportType,
+  UserVerificationRequirementType,
+  AuthenticatorAttachmentType,
+  ResidentKeyRequirementType,
+  AttestationConveyancePreferenceType,
+  PublicKeyCredentialType,
+  COSEAlgorithmIdentifier,
+  PublicKeyCredentialParametersType,
+  PublicKeyCredentialRpEntityType,
+  AuthenticatorSelectionCriteriaType,
+  AuthenticationExtensionsClientInputsType,
+  // Common
+  SocialProvider,
+  MfaMethod,
+  User,
+  Session,
+  NextAction,
+  AuthResult,
+  DirectAuthError,
+  // Passkey
+  PasskeyLoginOptions,
+  PasskeySignUpOptions,
+  PasskeyRegisterOptions,
+  PasskeyCredential,
+  // Email Code
+  EmailCodeSendOptions,
+  EmailCodeSendResult,
+  EmailCodeVerifyOptions,
+  // Social
+  SocialLoginOptions,
+  // Session
+  DirectAuthLogoutOptions,
+  // API Request/Response
+  PasskeyLoginStartRequest,
+  PasskeyLoginStartResponse,
+  PasskeyLoginFinishRequest,
+  PasskeyLoginFinishResponse,
+  PasskeySignupStartRequest,
+  PasskeySignupStartResponse,
+  PasskeySignupFinishRequest,
+  PasskeySignupFinishResponse,
+  EmailCodeSendRequest,
+  EmailCodeSendResponse,
+  EmailCodeVerifyRequest,
+  EmailCodeVerifyResponse,
+  DirectAuthTokenRequest,
+  DirectAuthTokenResponse,
+  // WebAuthn JSON
+  PublicKeyCredentialRequestOptionsJSON,
+  PublicKeyCredentialCreationOptionsJSON,
+  PublicKeyCredentialDescriptorJSON,
+  PublicKeyCredentialUserEntityJSON,
+  AuthenticatorAssertionResponseJSON,
+  AuthenticatorAttestationResponseJSON,
+  // SDK Interface
+  DirectAuthClientConfig,
+  PasskeyAuth,
+  EmailCodeAuth,
+  SocialAuth,
+  SessionAuth,
+  DirectAuthClient,
+} from './direct-auth/index.js';

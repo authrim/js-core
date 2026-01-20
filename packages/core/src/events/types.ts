@@ -3,7 +3,7 @@
  */
 
 import type { AuthrimError } from '../types/errors.js';
-import type { TokenSet } from '../types/token.js';
+import type { TokenSet, TokenTypeUri } from '../types/token.js';
 import type { UserInfo } from '../types/oidc.js';
 
 /**
@@ -32,7 +32,8 @@ export interface TokenErrorEvent {
  */
 export interface TokenExchangedEvent {
   tokens: TokenSet;
-  issuedTokenType: string;
+  /** Issued token type URI (RFC 8693 standard or custom URI) */
+  issuedTokenType: TokenTypeUri | string;
 }
 
 /**

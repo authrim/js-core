@@ -5,6 +5,7 @@
  */
 
 import type { AuthrimEvents, AuthrimEventName, AuthrimEventHandler } from './types.js';
+import { AuthrimError } from '../types/errors.js';
 
 /**
  * Typed Event Emitter
@@ -76,8 +77,23 @@ export class EventEmitter {
         try {
           handler(data);
         } catch (error) {
-          // Log but don't throw - one handler failure shouldn't affect others
-          console.error(`Error in event handler for '${event}':`, error);
+          // Don't throw - one handler failure shouldn't affect others
+          // For non-error events, emit an 'error' event
+          // For 'error' events, silently ignore to prevent infinite recursion
+          if (event !== 'error') {
+            const authrimError =
+              error instanceof AuthrimError
+                ? error
+                : new AuthrimError('event_handler_error', 'Event handler threw an error', {
+                    cause: error instanceof Error ? error : undefined,
+                  });
+            this.emit('error', {
+              error: authrimError,
+              context: `Error in event handler for '${event}'`,
+            });
+          }
+          // For 'error' event handlers that throw, we silently ignore
+          // to maintain platform-agnostic behavior (no console dependency)
         }
       }
     }

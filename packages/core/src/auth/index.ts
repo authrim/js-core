@@ -16,3 +16,9 @@ export {
   type AuthorizationContext,
   type ExchangeCodeOptions,
 } from './authorization-code.js';
+export {
+  SilentAuthHandler,
+  type SilentAuthOptions,
+  type SilentAuthUrlResult,
+  type SilentAuthResult,
+} from './silent-auth.js';

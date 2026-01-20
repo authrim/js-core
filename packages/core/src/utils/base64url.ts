@@ -39,8 +39,15 @@ export function base64urlEncode(data: Uint8Array): string {
  *
  * @param str - Base64URL encoded string
  * @returns Decoded bytes
+ * @throws Error if the input contains invalid characters
  */
 export function base64urlDecode(str: string): Uint8Array {
+  // Validate input contains only valid base64url characters
+  // Valid: A-Z, a-z, 0-9, -, _
+  if (!/^[A-Za-z0-9_-]*$/.test(str)) {
+    throw new Error('Invalid base64url string: contains invalid characters');
+  }
+
   // Convert base64url to base64
   let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
 

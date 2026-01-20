@@ -94,7 +94,28 @@ export type AuthrimErrorCode =
   | 'state_mismatch'
   | 'popup_blocked'
   | 'popup_closed'
-  | 'invalid_response';
+  | 'invalid_response'
+  // Direct Auth errors
+  | 'passkey_not_found'
+  | 'passkey_verification_failed'
+  | 'passkey_not_supported'
+  | 'passkey_cancelled'
+  | 'passkey_invalid_credential'
+  | 'email_code_invalid'
+  | 'email_code_expired'
+  | 'email_code_too_many_attempts'
+  | 'challenge_expired'
+  | 'challenge_invalid'
+  | 'auth_code_invalid'
+  | 'auth_code_expired'
+  | 'pkce_mismatch'
+  | 'origin_not_allowed'
+  | 'mfa_required'
+  | 'email_verification_required'
+  | 'consent_required_direct'
+  | 'rate_limited'
+  // Event errors
+  | 'event_handler_error';
 
 /**
  * Options for creating an AuthrimError
@@ -507,6 +528,131 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
     retryable: false,
     userAction: 'contact_support',
     severity: 'error',
+  },
+
+  // Direct Auth errors
+  passkey_not_found: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  passkey_verification_failed: {
+    transient: false,
+    retryable: true,
+    retryAfterMs: 1000,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  passkey_not_supported: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  passkey_cancelled: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  passkey_invalid_credential: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  email_code_invalid: {
+    transient: false,
+    retryable: true,
+    retryAfterMs: 0,
+    maxRetries: 5,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  email_code_expired: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  email_code_too_many_attempts: {
+    transient: false,
+    retryable: false,
+    retryAfterMs: 300000,
+    userAction: 'retry',
+    severity: 'error',
+  },
+  challenge_expired: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  challenge_invalid: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  auth_code_invalid: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  auth_code_expired: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  pkce_mismatch: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  origin_not_allowed: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  mfa_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  email_verification_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  consent_required_direct: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  rate_limited: {
+    transient: true,
+    retryable: true,
+    retryAfterMs: 60000,
+    maxRetries: 3,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+
+  // Event errors
+  event_handler_error: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
   },
 };
 

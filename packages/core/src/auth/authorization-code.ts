@@ -12,6 +12,7 @@ import type { AuthState } from './state.js';
 import type { PKCEPair } from './pkce.js';
 import { AuthrimError } from '../types/errors.js';
 import { getIdTokenNonce } from '../utils/jwt.js';
+import { timingSafeEqual } from '../utils/timing-safe.js';
 
 /**
  * Options for building authorization URL
@@ -172,7 +173,9 @@ export class AuthorizationCodeFlow {
    *
    * @param callbackUrl - Callback URL or query string
    * @returns Parsed code and state
-   * @throws AuthrimError if code or state is missing, or if error is present
+   * @throws AuthrimError with code 'oauth_error' if OAuth error response is present
+   * @throws AuthrimError with code 'missing_code' if authorization code is not found
+   * @throws AuthrimError with code 'missing_state' if state parameter is not found
    */
   parseCallback(callbackUrl: string): { code: string; state: string } {
     let searchParams: URLSearchParams;
@@ -220,7 +223,9 @@ export class AuthorizationCodeFlow {
    * @param discovery - OIDC discovery document
    * @param options - Exchange options
    * @returns Token set
-   * @throws AuthrimError if exchange fails or nonce validation fails
+   * @throws AuthrimError with code 'network_error' if token request fails
+   * @throws AuthrimError with code 'token_error' if token exchange fails
+   * @throws AuthrimError with code 'nonce_mismatch' if ID token nonce validation fails
    */
   async exchangeCode(
     discovery: OIDCDiscoveryDocument,
@@ -266,10 +271,10 @@ export class AuthorizationCodeFlow {
 
     const tokenResponse = response.data;
 
-    // Validate nonce in ID token
+    // Validate nonce in ID token (using constant-time comparison to prevent timing attacks)
     if (tokenResponse.id_token) {
       const idTokenNonce = getIdTokenNonce(tokenResponse.id_token);
-      if (idTokenNonce !== options.nonce) {
+      if (idTokenNonce === undefined || !timingSafeEqual(idTokenNonce, options.nonce)) {
         // Do not include nonce values in error details (security sensitive)
         throw new AuthrimError('nonce_mismatch', 'ID token nonce does not match expected value');
       }

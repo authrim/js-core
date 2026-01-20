@@ -76,6 +76,9 @@ export class StateManager {
   /** Default TTL: 10 minutes */
   private static readonly DEFAULT_TTL_SECONDS = 600;
 
+  /** Entropy bytes for state/nonce generation (256 bits = 32 bytes) */
+  private static readonly ENTROPY_BYTES = 32;
+
   constructor(
     private readonly crypto: CryptoProvider,
     private readonly storage: AuthrimStorage,
@@ -94,9 +97,9 @@ export class StateManager {
   async generateAuthState(options: GenerateAuthStateOptions): Promise<AuthState> {
     const ttlSeconds = options.ttlSeconds ?? StateManager.DEFAULT_TTL_SECONDS;
 
-    // Generate random state and nonce (32 bytes each)
-    const stateBytes = await this.crypto.randomBytes(32);
-    const nonceBytes = await this.crypto.randomBytes(32);
+    // Generate random state and nonce (256-bit entropy each)
+    const stateBytes = await this.crypto.randomBytes(StateManager.ENTROPY_BYTES);
+    const nonceBytes = await this.crypto.randomBytes(StateManager.ENTROPY_BYTES);
 
     const state = base64urlEncode(stateBytes);
     const nonce = base64urlEncode(nonceBytes);

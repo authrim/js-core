@@ -222,7 +222,7 @@ export class TokenManager {
    * Perform refresh with single retry for network errors
    *
    * @param refreshToken - Refresh token to use
-   * @param attemptedRetry - Whether retry has been attempted (stack-local)
+   * @param attemptedRetry - Internal flag to prevent infinite recursion (do not pass externally)
    * @returns New token set
    */
   private async doRefreshWithRetry(
