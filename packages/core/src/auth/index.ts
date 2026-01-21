@@ -22,3 +22,14 @@ export {
   type SilentAuthUrlResult,
   type SilentAuthResult,
 } from './silent-auth.js';
+export { PARClient } from './par.js';
+export {
+  buildClientAuthentication,
+  type ClientAuthResult,
+} from './client-auth.js';
+export {
+  ClientCredentialsClient,
+  type ClientCredentialsClientOptions,
+  type ClientCredentialsTokenOptions,
+} from './client-credentials.js';
+export { DeviceFlowClient } from './device-flow.js';

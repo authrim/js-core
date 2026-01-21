@@ -19,3 +19,19 @@ export {
 } from './jwt.js';
 
 export { calculateDsHash } from './hash.js';
+
+export {
+  withAbortSignal,
+  createCancellableOperation,
+  isCancellationError,
+  raceWithCancellation,
+} from './cancellation.js';
+
+export {
+  withRetry,
+  createRetryFunction,
+  calculateBackoffDelay,
+  sleep,
+  parseRetryAfterHeader,
+  type RetryOptions,
+} from './retry.js';

@@ -124,7 +124,11 @@ export class LogoutHandler {
     await this.clearTokens();
 
     // Emit session ended event
-    this.eventEmitter?.emit('session:ended', { reason: 'logout' });
+    this.eventEmitter?.emit('session:ended', {
+      reason: 'logout',
+      timestamp: Date.now(),
+      source: 'core',
+    });
 
     // Determine end_session_endpoint
     // Priority: config override > discovery > null

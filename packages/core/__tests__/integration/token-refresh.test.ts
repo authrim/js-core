@@ -87,9 +87,12 @@ describe('Token Refresh Integration', () => {
       expect(refreshedHandler).toHaveBeenCalledOnce();
       expect(refreshedHandler).toHaveBeenCalledWith(
         expect.objectContaining({
-          tokens: expect.objectContaining({
-            accessToken: expect.any(String),
-          }),
+          hasAccessToken: true,
+          hasRefreshToken: expect.any(Boolean),
+          hasIdToken: expect.any(Boolean),
+          expiresAt: expect.any(Number),
+          timestamp: expect.any(Number),
+          source: 'core',
         })
       );
     });

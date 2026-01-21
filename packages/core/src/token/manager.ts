@@ -17,7 +17,7 @@ import type {
 } from '../types/token.js';
 import { TOKEN_TYPE_URIS } from '../types/token.js';
 import type { EventEmitter } from '../events/emitter.js';
-import { AuthrimError } from '../types/errors.js';
+import { AuthrimError, isRetryableError, emitClassifiedError } from '../types/errors.js';
 import { STORAGE_KEYS } from '../auth/state.js';
 
 /**
@@ -38,6 +38,10 @@ export interface TokenManagerOptions {
   refreshSkewSeconds?: number;
   /** Event emitter for token events */
   eventEmitter?: EventEmitter;
+  /** Token expiring warning threshold in seconds (default: 300 = 5 minutes) */
+  expiringThresholdSeconds?: number;
+  /** Jitter for expiring event in milliseconds (default: 30000 = ±30 seconds) */
+  expiringJitterMs?: number;
 }
 
 /**
@@ -54,6 +58,8 @@ export class TokenManager {
   private readonly clientIdHash: string;
   private readonly refreshSkewSeconds: number;
   private readonly eventEmitter?: EventEmitter;
+  private readonly expiringThresholdMs: number;
+  private readonly expiringJitterMs: number;
 
   /** In-flight refresh promise for request coalescing */
   private refreshPromise: Promise<TokenSet> | null = null;
@@ -61,8 +67,23 @@ export class TokenManager {
   /** Discovery document (set externally) */
   private discovery: OIDCDiscoveryDocument | null = null;
 
+  /** Timer for token expiring event */
+  private expiringTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  /** Whether this tab is the leader for refresh scheduling */
+  private isLeaderTab = true;
+
+  /** Current operation ID for event tracking */
+  private currentOperationId: string | null = null;
+
   /** Default refresh skew: 30 seconds */
   private static readonly DEFAULT_REFRESH_SKEW_SECONDS = 30;
+
+  /** Default expiring threshold: 5 minutes */
+  private static readonly DEFAULT_EXPIRING_THRESHOLD_SECONDS = 300;
+
+  /** Default expiring jitter: ±30 seconds */
+  private static readonly DEFAULT_EXPIRING_JITTER_MS = 30000;
 
   constructor(options: TokenManagerOptions) {
     this.http = options.http;
@@ -73,6 +94,9 @@ export class TokenManager {
     this.refreshSkewSeconds =
       options.refreshSkewSeconds ?? TokenManager.DEFAULT_REFRESH_SKEW_SECONDS;
     this.eventEmitter = options.eventEmitter;
+    this.expiringThresholdMs =
+      (options.expiringThresholdSeconds ?? TokenManager.DEFAULT_EXPIRING_THRESHOLD_SECONDS) * 1000;
+    this.expiringJitterMs = options.expiringJitterMs ?? TokenManager.DEFAULT_EXPIRING_JITTER_MS;
   }
 
   /**
@@ -128,6 +152,80 @@ export class TokenManager {
     if (tokens.idToken) {
       await this.storage.set(this.idTokenKey, tokens.idToken);
     }
+
+    // Schedule expiring event
+    this.scheduleExpiringEvent(tokens.expiresAt);
+  }
+
+  /**
+   * Schedule token:expiring event with jitter
+   *
+   * @param expiresAt - Token expiration timestamp (epoch seconds)
+   */
+  private scheduleExpiringEvent(expiresAt: number): void {
+    // Clear existing timeout
+    if (this.expiringTimeout) {
+      clearTimeout(this.expiringTimeout);
+      this.expiringTimeout = null;
+    }
+
+    // Only schedule if we're the leader tab
+    if (!this.isLeaderTab) {
+      return;
+    }
+
+    const expiresAtMs = expiresAt * 1000;
+    const warningTime = expiresAtMs - this.expiringThresholdMs;
+
+    // Add jitter: random value between -jitter and +jitter
+    const jitter = Math.random() * this.expiringJitterMs * 2 - this.expiringJitterMs;
+    const delay = warningTime - Date.now() + jitter;
+
+    // Only schedule if the warning time is in the future
+    if (delay > 0) {
+      this.expiringTimeout = setTimeout(() => {
+        const now = Date.now();
+        const expiresIn = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+
+        this.eventEmitter?.emit('token:expiring', {
+          expiresAt,
+          expiresIn,
+          timestamp: now,
+          source: 'core',
+        });
+      }, delay);
+    }
+  }
+
+  /**
+   * Set leader tab status
+   *
+   * When not the leader, expiring event scheduling is disabled
+   * to prevent multiple tabs from triggering simultaneous refreshes.
+   *
+   * @param isLeader - Whether this tab is the leader
+   */
+  setLeaderTab(isLeader: boolean): void {
+    this.isLeaderTab = isLeader;
+
+    if (!isLeader && this.expiringTimeout) {
+      clearTimeout(this.expiringTimeout);
+      this.expiringTimeout = null;
+    }
+  }
+
+  /**
+   * Set current operation ID for event tracking
+   */
+  setOperationId(operationId: string | null): void {
+    this.currentOperationId = operationId;
+  }
+
+  /**
+   * Get current operation ID
+   */
+  getOperationId(): string | null {
+    return this.currentOperationId;
   }
 
   /**
@@ -197,9 +295,13 @@ export class TokenManager {
    * starting a new one.
    *
    * @param refreshToken - Refresh token to use
+   * @param reason - Reason for refresh
    * @returns Access token from new token set
    */
-  private async refreshWithLock(refreshToken: string): Promise<string> {
+  private async refreshWithLock(
+    refreshToken: string,
+    reason: 'expiring' | 'manual' | 'on_demand' | 'background' = 'on_demand'
+  ): Promise<string> {
     // If refresh is already in-flight, wait for it
     if (this.refreshPromise) {
       const tokens = await this.refreshPromise;
@@ -207,7 +309,7 @@ export class TokenManager {
     }
 
     // Start new refresh operation
-    this.refreshPromise = this.doRefreshWithRetry(refreshToken);
+    this.refreshPromise = this.doRefreshWithRetry(refreshToken, reason);
 
     try {
       const tokens = await this.refreshPromise;
@@ -219,23 +321,93 @@ export class TokenManager {
   }
 
   /**
-   * Perform refresh with single retry for network errors
+   * Manually refresh tokens
+   *
+   * @returns New token set
+   * @throws AuthrimError if refresh fails
+   */
+  async refresh(): Promise<TokenSet> {
+    const tokens = await this.getTokens();
+    if (!tokens?.refreshToken) {
+      throw new AuthrimError('no_tokens', 'No refresh token available');
+    }
+
+    // Start new refresh with manual reason
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = this.doRefreshWithRetry(tokens.refreshToken, 'manual');
+
+    try {
+      return await this.refreshPromise;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  /**
+   * Perform refresh with retry for network errors
    *
    * @param refreshToken - Refresh token to use
-   * @param attemptedRetry - Internal flag to prevent infinite recursion (do not pass externally)
+   * @param reason - Reason for refresh
+   * @param attempt - Current retry attempt (0-indexed)
    * @returns New token set
    */
   private async doRefreshWithRetry(
     refreshToken: string,
-    attemptedRetry = false
+    reason: 'expiring' | 'manual' | 'on_demand' | 'background' = 'on_demand',
+    attempt = 0
   ): Promise<TokenSet> {
+    const maxRetries = 1;
+    const timestamp = Date.now();
+
+    // Emit refreshing event on first attempt
+    if (attempt === 0) {
+      this.eventEmitter?.emit('token:refreshing', {
+        reason,
+        timestamp,
+        source: 'core',
+        operationId: this.currentOperationId ?? undefined,
+      });
+    }
+
     try {
       return await this.doRefresh(refreshToken);
     } catch (error) {
-      // Retry once for network errors only
-      if (this.isRetryableError(error) && !attemptedRetry) {
-        return this.doRefreshWithRetry(refreshToken, true);
+      const authrimError = error instanceof AuthrimError
+        ? error
+        : new AuthrimError('refresh_error', 'Token refresh failed', {
+            cause: error instanceof Error ? error : undefined,
+          });
+
+      const willRetry = attempt < maxRetries && isRetryableError(authrimError);
+
+      // Emit refresh failed event
+      this.eventEmitter?.emit('token:refresh:failed', {
+        error: authrimError,
+        willRetry,
+        attempt,
+        timestamp: Date.now(),
+        source: 'core',
+        operationId: this.currentOperationId ?? undefined,
+      });
+
+      // Retry once for retryable errors
+      if (willRetry) {
+        return this.doRefreshWithRetry(refreshToken, reason, attempt + 1);
       }
+
+      // Emit auth:required if refresh failed and not retryable
+      if (!isRetryableError(authrimError)) {
+        this.eventEmitter?.emit('auth:required', {
+          reason: 'refresh_failed',
+          timestamp: Date.now(),
+          source: 'core',
+          operationId: this.currentOperationId ?? undefined,
+        });
+      }
+
       throw error;
     }
   }
@@ -273,7 +445,16 @@ export class TokenManager {
       const authrimError = new AuthrimError('network_error', 'Token refresh request failed', {
         cause: error instanceof Error ? error : undefined,
       });
-      this.eventEmitter?.emit('token:error', { error: authrimError });
+      this.eventEmitter?.emit('token:error', {
+        error: authrimError,
+        context: 'refresh',
+        timestamp: Date.now(),
+        source: 'core',
+      });
+      // Also emit classified error events (error:recoverable or error:fatal)
+      if (this.eventEmitter) {
+        emitClassifiedError(this.eventEmitter, authrimError, { context: 'refresh' });
+      }
       throw authrimError;
     }
 
@@ -286,7 +467,16 @@ export class TokenManager {
           error_description: errorData?.error_description,
         },
       });
-      this.eventEmitter?.emit('token:error', { error: authrimError });
+      this.eventEmitter?.emit('token:error', {
+        error: authrimError,
+        context: 'refresh',
+        timestamp: Date.now(),
+        source: 'core',
+      });
+      // Also emit classified error events (error:recoverable or error:fatal)
+      if (this.eventEmitter) {
+        emitClassifiedError(this.eventEmitter, authrimError, { context: 'refresh' });
+      }
       throw authrimError;
     }
 
@@ -309,20 +499,18 @@ export class TokenManager {
     // Save new tokens
     await this.saveTokens(newTokens);
 
-    // Emit event
-    this.eventEmitter?.emit('token:refreshed', { tokens: newTokens });
+    // Emit event with new format (no token values for security)
+    this.eventEmitter?.emit('token:refreshed', {
+      hasAccessToken: !!newTokens.accessToken,
+      hasRefreshToken: !!newTokens.refreshToken,
+      hasIdToken: !!newTokens.idToken,
+      expiresAt: newTokens.expiresAt,
+      timestamp: Date.now(),
+      source: 'core',
+      operationId: this.currentOperationId ?? undefined,
+    });
 
     return newTokens;
-  }
-
-  /**
-   * Check if error is retryable (network errors only)
-   */
-  private isRetryableError(error: unknown): boolean {
-    if (error instanceof AuthrimError) {
-      return error.code === 'network_error';
-    }
-    return false;
   }
 
   /**
@@ -404,7 +592,16 @@ export class TokenManager {
       const authrimError = new AuthrimError('network_error', 'Token exchange request failed', {
         cause: error instanceof Error ? error : undefined,
       });
-      this.eventEmitter?.emit('token:error', { error: authrimError });
+      this.eventEmitter?.emit('token:error', {
+        error: authrimError,
+        context: 'exchange',
+        timestamp: Date.now(),
+        source: 'core',
+      });
+      // Also emit classified error events (error:recoverable or error:fatal)
+      if (this.eventEmitter) {
+        emitClassifiedError(this.eventEmitter, authrimError, { context: 'exchange' });
+      }
       throw authrimError;
     }
 
@@ -417,7 +614,16 @@ export class TokenManager {
           error_description: errorData?.error_description,
         },
       });
-      this.eventEmitter?.emit('token:error', { error: authrimError });
+      this.eventEmitter?.emit('token:error', {
+        error: authrimError,
+        context: 'exchange',
+        timestamp: Date.now(),
+        source: 'core',
+      });
+      // Also emit classified error events (error:recoverable or error:fatal)
+      if (this.eventEmitter) {
+        emitClassifiedError(this.eventEmitter, authrimError, { context: 'exchange' });
+      }
       throw authrimError;
     }
 
@@ -441,10 +647,14 @@ export class TokenManager {
       issuedTokenType: tokenResponse.issued_token_type,
     };
 
-    // Emit event
+    // Emit event with new format (no token values for security)
     this.eventEmitter?.emit('token:exchanged', {
-      tokens,
+      hasAccessToken: !!tokens.accessToken,
+      hasRefreshToken: !!tokens.refreshToken,
       issuedTokenType: tokenResponse.issued_token_type,
+      timestamp: Date.now(),
+      source: 'core',
+      operationId: this.currentOperationId ?? undefined,
     });
 
     return result;
@@ -455,5 +665,15 @@ export class TokenManager {
    */
   private mapTokenTypeToUri(type: 'access_token' | 'refresh_token' | 'id_token'): string {
     return TOKEN_TYPE_URIS[type];
+  }
+
+  /**
+   * Clean up resources
+   */
+  destroy(): void {
+    if (this.expiringTimeout) {
+      clearTimeout(this.expiringTimeout);
+      this.expiringTimeout = null;
+    }
   }
 }

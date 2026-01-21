@@ -277,7 +277,13 @@ describe('Full Authentication Flow Integration', () => {
 
       // Logout
       await logoutHandler.logout(server.discovery);
-      expect(sessionEndedHandler).toHaveBeenCalledWith({ reason: 'logout' });
+      expect(sessionEndedHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reason: 'logout',
+          timestamp: expect.any(Number),
+          source: 'core',
+        })
+      );
     });
   });
 });

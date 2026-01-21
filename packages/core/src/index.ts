@@ -45,9 +45,87 @@ export {
   type SilentAuthUrlResult,
   type SilentAuthResult,
 } from './auth/silent-auth.js';
+export { PARClient } from './auth/par.js';
+export type {
+  PARRequest,
+  PARResponse,
+  PARResult,
+  PARClientOptions,
+} from './types/par.js';
+
+// Client Authentication
+export {
+  buildClientAuthentication,
+  type ClientAuthResult,
+} from './auth/client-auth.js';
+export {
+  ClientCredentialsClient,
+  type ClientCredentialsClientOptions,
+  type ClientCredentialsTokenOptions,
+} from './auth/client-credentials.js';
+export type {
+  ClientAuthMethod,
+  ClientSecretCredentials,
+  PrivateKeyJwtCredentials,
+  NoClientCredentials,
+  ClientCredentials,
+  ClientAssertionClaims,
+} from './types/client-auth.js';
+
+// Device Flow
+export { DeviceFlowClient } from './auth/device-flow.js';
+export type {
+  DeviceAuthorizationResponse,
+  DeviceFlowState,
+  DeviceFlowPollResult,
+  DeviceFlowPendingResult,
+  DeviceFlowCompletedResult,
+  DeviceFlowSlowDownResult,
+  DeviceFlowExpiredResult,
+  DeviceFlowAccessDeniedResult,
+  DeviceFlowStartOptions,
+} from './types/device-flow.js';
+
+// Security (DPoP, JAR, JARM)
+export { DPoPManager } from './security/dpop.js';
+export type {
+  JWK,
+  DPoPKeyPair,
+  DPoPProofHeader,
+  DPoPProofClaims,
+  DPoPProofOptions,
+  DPoPManagerConfig,
+  DPoPCryptoProvider,
+} from './types/dpop.js';
+export { JARBuilder, isJarRequired } from './security/jar.js';
+export type {
+  JARRequestObjectClaims,
+  JARBuilderConfig,
+  JARRequestOptions,
+} from './types/jar.js';
+export { JARMValidator } from './security/jarm.js';
+export type {
+  JARMResponseClaims,
+  JARMValidationOptions,
+  JARMValidationResult,
+  JARMValidatorConfig,
+} from './types/jarm.js';
+
+// Session Management Types (implementation in web SDK)
+export type {
+  SessionState,
+  CheckSessionMessage,
+  CheckSessionResponse,
+  SessionManagementConfig,
+  SessionChangeEvent,
+  FrontChannelLogoutParams,
+  FrontChannelLogoutUrlOptions,
+  LogoutTokenClaims,
+} from './types/session-management.js';
 
 // Token
 export { TokenManager, type TokenManagerOptions } from './token/manager.js';
+export { AutoRefreshScheduler, type AutoRefreshOptions } from './token/auto-refresh.js';
 export {
   TokenIntrospector,
   type TokenIntrospectorOptions,
@@ -75,33 +153,111 @@ export {
   type TokenApiClientOptions,
 } from './session/token-api.js';
 export { SessionManager, type SessionManagerOptions } from './session/manager.js';
+export {
+  SessionStateCalculator,
+  type SessionStateParams,
+  type SessionStateResult,
+  type SessionStateCalculatorOptions,
+} from './session/session-state.js';
+export {
+  FrontChannelLogoutUrlBuilder,
+  type FrontChannelLogoutUrlResult,
+  type FrontChannelLogoutBuildParams,
+  type FrontChannelLogoutValidationOptions,
+  type FrontChannelLogoutValidationResult,
+} from './session/front-channel-logout.js';
+export {
+  BackChannelLogoutValidator,
+  BACKCHANNEL_LOGOUT_EVENT,
+  type BackChannelLogoutErrorCode,
+  type BackChannelLogoutValidationOptions,
+  type BackChannelLogoutValidationResult,
+} from './session/back-channel-logout.js';
 
 // Events
 export { EventEmitter } from './events/emitter.js';
 export type {
-  AuthrimEvents,
-  AuthrimEventName,
-  AuthrimEventHandler,
+  // Base types
+  BaseEventPayload,
+  // auth:* events
+  AuthInitEvent,
+  AuthRedirectingEvent,
+  AuthCallbackEvent,
+  AuthCallbackProcessingEvent,
+  AuthCallbackCompleteEvent,
+  AuthLoginCompleteEvent,
+  AuthLogoutCompleteEvent,
+  AuthRequiredEvent,
+  AuthPopupBlockedEvent,
+  AuthFallbackEvent,
+  // token:* events
+  TokenRefreshingEvent,
   TokenRefreshedEvent,
+  TokenRefreshFailedEvent,
+  TokenExpiringEvent,
   TokenExpiredEvent,
   TokenErrorEvent,
   TokenExchangedEvent,
+  // session:* events
   SessionStartedEvent,
   SessionEndedEvent,
-  AuthRedirectingEvent,
-  AuthCallbackEvent,
+  SessionChangedEvent,
+  SessionSyncEvent,
+  SessionLogoutBroadcastEvent,
+  // state:* events
+  AuthState as AuthStateType,
+  AuthStateSnapshot,
+  StateChangeEvent,
+  // error:* events
+  ErrorSeverity,
+  ErrorEventPayload,
   ErrorEvent,
+  ErrorRecoverableEvent,
+  ErrorFatalEvent,
+  // warning:* events
+  WarningITPEvent,
+  WarningStorageFallbackEvent,
+  WarningPrivateModeEvent,
+  // debug:* events
+  TimelineEntry,
+  DebugTimelineEvent,
+  // Event utilities
+  AuthrimEvents,
+  AuthrimEventName,
+  AuthrimEventHandler,
+  CoreEventName,
+  WebOnlyEventName,
 } from './events/types.js';
+
+// Debug
+export {
+  EventTimeline,
+  createConsoleLogger,
+  createDebugLogger,
+  noopLogger,
+  DebugContext,
+  type DebugOptions,
+  type DebugLogger,
+  type DebugLogLevel,
+  type RedactLevel,
+} from './debug/index.js';
 
 // Types
 export {
   AuthrimError,
   getErrorMeta,
+  classifyError,
+  isRetryableError,
+  emitClassifiedError,
   type AuthrimErrorOptions,
   type AuthrimErrorCode,
   type AuthrimErrorMeta,
   type AuthrimErrorUserAction,
   type AuthrimErrorSeverity,
+  type AuthrimErrorRemediation,
+  type ErrorClassification,
+  type ErrorEventEmitter,
+  type EmitClassifiedErrorOptions,
 } from './types/errors.js';
 export type {
   OIDCDiscoveryDocument,
@@ -136,6 +292,20 @@ export {
 } from './utils/jwt.js';
 export { calculateDsHash } from './utils/hash.js';
 export { timingSafeEqual } from './utils/timing-safe.js';
+export {
+  withAbortSignal,
+  createCancellableOperation,
+  isCancellationError,
+  raceWithCancellation,
+} from './utils/cancellation.js';
+export {
+  withRetry,
+  createRetryFunction,
+  calculateBackoffDelay,
+  sleep,
+  parseRetryAfterHeader,
+  type RetryOptions,
+} from './utils/retry.js';
 
 // Direct Auth
 export type {

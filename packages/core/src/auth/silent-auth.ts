@@ -24,6 +24,13 @@ export interface SilentAuthOptions {
   redirectUri: string;
   /** Scopes to request (default: 'openid') */
   scope?: string;
+  /**
+   * Response type (default: 'code')
+   *
+   * Use 'none' for session check without token issuance
+   * (OAuth 2.0 Multiple Response Types 1.0 §5)
+   */
+  responseType?: 'code' | 'none';
   /** Hint about the login identifier */
   loginHint?: string;
   /** ID token hint (helps IdP identify the user) */
@@ -103,7 +110,7 @@ export class SilentAuthHandler {
 
     // Required parameters
     params.set('client_id', this.clientId);
-    params.set('response_type', 'code');
+    params.set('response_type', options.responseType ?? 'code');
     params.set('redirect_uri', options.redirectUri);
     params.set('state', authState.state);
     params.set('nonce', authState.nonce);

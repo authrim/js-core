@@ -102,6 +102,48 @@ export interface OIDCDiscoveryDocument {
   /** Code challenge methods supported (OPTIONAL) */
   code_challenge_methods_supported?: string[];
 
+  // PAR (RFC 9126)
+  /** Pushed Authorization Request endpoint (OPTIONAL) */
+  pushed_authorization_request_endpoint?: string;
+  /** Whether PAR is required (OPTIONAL) */
+  require_pushed_authorization_requests?: boolean;
+
+  // Device Flow (RFC 8628)
+  /** Device Authorization endpoint (OPTIONAL) */
+  device_authorization_endpoint?: string;
+
+  // DPoP (RFC 9449)
+  /** DPoP signing algorithms supported (OPTIONAL) */
+  dpop_signing_alg_values_supported?: string[];
+
+  // JAR (RFC 9101)
+  /** Whether signed request object is required (OPTIONAL) */
+  require_signed_request_object?: boolean;
+
+  // JARM (JWT Secured Authorization Response Mode)
+  /** Authorization response signing algorithms supported (OPTIONAL) */
+  authorization_signing_alg_values_supported?: string[];
+  /** Authorization response encryption algorithms supported (OPTIONAL) */
+  authorization_encryption_alg_values_supported?: string[];
+  /** Authorization response encryption enc values supported (OPTIONAL) */
+  authorization_encryption_enc_values_supported?: string[];
+
+  // Session Management
+  /** Check session iframe URL (OPTIONAL) */
+  check_session_iframe?: string;
+
+  // Front-Channel Logout
+  /** Whether front-channel logout is supported (OPTIONAL) */
+  frontchannel_logout_supported?: boolean;
+  /** Whether session ID is required in front-channel logout (OPTIONAL) */
+  frontchannel_logout_session_supported?: boolean;
+
+  // Back-Channel Logout
+  /** Whether back-channel logout is supported (OPTIONAL) */
+  backchannel_logout_supported?: boolean;
+  /** Whether session ID is required in back-channel logout (OPTIONAL) */
+  backchannel_logout_session_supported?: boolean;
+
   // Flow Engine (Authrim extension)
   /** Flow Engine support indicator (OPTIONAL, Authrim-specific) */
   flow_engine_supported?: boolean;

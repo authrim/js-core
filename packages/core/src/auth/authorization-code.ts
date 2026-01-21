@@ -22,6 +22,13 @@ export interface BuildAuthorizationUrlOptions {
   redirectUri: string;
   /** Scopes to request (default: 'openid profile') */
   scope?: string;
+  /**
+   * Response type (default: 'code')
+   *
+   * Use 'none' for session check without token issuance
+   * (OAuth 2.0 Multiple Response Types 1.0 §5)
+   */
+  responseType?: 'code' | 'none';
   /** Prompt behavior */
   prompt?: 'none' | 'login' | 'consent' | 'select_account';
   /** Hint about the login identifier */
@@ -38,6 +45,23 @@ export interface BuildAuthorizationUrlOptions {
    * (e.g., cookie, server-side session)
    */
   exposeState?: boolean;
+  /**
+   * Use PAR (Pushed Authorization Request - RFC 9126)
+   *
+   * When true, authorization parameters are first pushed to the PAR endpoint,
+   * and the resulting request_uri is used in the authorization URL.
+   *
+   * Required when server sets require_pushed_authorization_requests=true.
+   */
+  usePar?: boolean;
+  /**
+   * Use JAR (JWT Secured Authorization Request - RFC 9101)
+   *
+   * When true, authorization parameters are encoded in a signed JWT.
+   *
+   * Required when server sets require_signed_request_object=true.
+   */
+  useJar?: boolean;
 }
 
 /**
@@ -76,6 +100,8 @@ export interface ExchangeCodeOptions {
   codeVerifier: string;
   /** Nonce to validate in ID token */
   nonce: string;
+  /** Requested scope (for validation) */
+  scope: string;
 }
 
 /**
@@ -95,6 +121,7 @@ export class AuthorizationCodeFlow {
    * @param pkce - PKCE pair
    * @param options - Authorization options
    * @returns Authorization URL result
+   * @throws AuthrimError with code 'par_required' if server requires PAR but usePar is not enabled
    */
   buildAuthorizationUrl(
     discovery: OIDCDiscoveryDocument,
@@ -102,12 +129,28 @@ export class AuthorizationCodeFlow {
     pkce: PKCEPair,
     options: BuildAuthorizationUrlOptions
   ): AuthorizationUrlResult {
+    // PAR enforcement guard: fail if server requires PAR but usePar is not enabled
+    if (discovery.require_pushed_authorization_requests && !options.usePar) {
+      throw new AuthrimError(
+        'par_required',
+        'Server requires PAR (Pushed Authorization Request) but usePar option is not enabled'
+      );
+    }
+
+    // JAR enforcement guard: fail if server requires JAR but useJar is not enabled
+    if (discovery.require_signed_request_object && !options.useJar) {
+      throw new AuthrimError(
+        'jar_required',
+        'Server requires JAR (JWT Secured Authorization Request) but useJar option is not enabled'
+      );
+    }
+
     const endpoint = discovery.authorization_endpoint;
     const params = new URLSearchParams();
 
     // Required parameters
     params.set('client_id', this.clientId);
-    params.set('response_type', 'code');
+    params.set('response_type', options.responseType ?? 'code');
     params.set('redirect_uri', options.redirectUri);
     params.set('state', authState.state);
     params.set('nonce', authState.nonce);
@@ -271,10 +314,28 @@ export class AuthorizationCodeFlow {
 
     const tokenResponse = response.data;
 
+    // Check if openid scope was requested
+    const requestedOpenId = options.scope.split(' ').includes('openid');
+
+    // OIDC compliance: If openid scope was requested, id_token MUST be present
+    if (requestedOpenId && !tokenResponse.id_token) {
+      throw new AuthrimError(
+        'missing_id_token',
+        'ID token required when openid scope is requested but was not returned by the server'
+      );
+    }
+
     // Validate nonce in ID token (using constant-time comparison to prevent timing attacks)
     if (tokenResponse.id_token) {
       const idTokenNonce = getIdTokenNonce(tokenResponse.id_token);
-      if (idTokenNonce === undefined || !timingSafeEqual(idTokenNonce, options.nonce)) {
+      // Security: nonce MUST be present in id_token when it was sent in the request
+      if (idTokenNonce === undefined) {
+        throw new AuthrimError(
+          'missing_nonce',
+          'ID token nonce claim is missing but was sent in authorization request'
+        );
+      }
+      if (!timingSafeEqual(idTokenNonce, options.nonce)) {
         // Do not include nonce values in error details (security sensitive)
         throw new AuthrimError('nonce_mismatch', 'ID token nonce does not match expected value');
       }

@@ -268,12 +268,15 @@ describe('Token Exchange (RFC 8693)', () => {
       await tokenManager.exchangeToken({ subjectToken: 'token' });
 
       expect(exchangedHandler).toHaveBeenCalledOnce();
-      expect(exchangedHandler).toHaveBeenCalledWith({
-        tokens: expect.objectContaining({
-          accessToken: 'exchanged-access-token',
-        }),
-        issuedTokenType: TOKEN_TYPE_URIS.access_token,
-      });
+      expect(exchangedHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          hasAccessToken: true,
+          hasRefreshToken: expect.any(Boolean),
+          issuedTokenType: TOKEN_TYPE_URIS.access_token,
+          timestamp: expect.any(Number),
+          source: 'core',
+        })
+      );
     });
 
     it('should emit token:error event on failure', async () => {
@@ -289,11 +292,16 @@ describe('Token Exchange (RFC 8693)', () => {
       await expect(tokenManager.exchangeToken({ subjectToken: 'token' })).rejects.toThrow();
 
       expect(errorHandler).toHaveBeenCalledOnce();
-      expect(errorHandler).toHaveBeenCalledWith({
-        error: expect.objectContaining({
-          code: 'token_exchange_error',
-        }),
-      });
+      expect(errorHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.objectContaining({
+            code: 'token_exchange_error',
+          }),
+          context: 'exchange',
+          timestamp: expect.any(Number),
+          source: 'core',
+        })
+      );
     });
   });
 

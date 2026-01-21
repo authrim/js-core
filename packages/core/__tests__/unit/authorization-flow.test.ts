@@ -44,6 +44,7 @@ describe('Authorization Flow', () => {
       const authState = await stateManager.generateAuthState({
         redirectUri,
         codeVerifier: 'test-verifier',
+        scope: 'openid profile',
         ttlSeconds: 600,
       });
 
@@ -78,6 +79,7 @@ describe('Authorization Flow', () => {
       const authState = await stateManager.generateAuthState({
         redirectUri,
         codeVerifier: 'test-verifier',
+        scope: 'openid profile',
         ttlSeconds: 0, // Expires immediately
       });
 
@@ -159,6 +161,7 @@ describe('Authorization Flow', () => {
           redirectUri,
           codeVerifier: 'test-verifier',
           nonce: expectedNonce,
+          scope: 'openid profile',
         })
       ).rejects.toMatchObject({ code: 'nonce_mismatch' });
     });
@@ -182,6 +185,7 @@ describe('Authorization Flow', () => {
         redirectUri,
         codeVerifier: 'test-verifier',
         nonce,
+        scope: 'openid profile',
       });
 
       expect(tokens.accessToken).toBe('mock-access-token');
@@ -196,6 +200,7 @@ describe('Authorization Flow', () => {
       const authState = await stateManager.generateAuthState({
         redirectUri,
         codeVerifier: 'test-verifier',
+        scope: 'openid profile',
       });
 
       const pkce = {
@@ -237,6 +242,7 @@ describe('Authorization Flow', () => {
       const authState = await stateManager.generateAuthState({
         redirectUri,
         codeVerifier: 'test-verifier',
+        scope: 'openid profile',
       });
 
       const pkce = {

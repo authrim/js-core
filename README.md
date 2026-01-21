@@ -9,7 +9,7 @@ This monorepo contains the official client libraries for integrating with Authri
 | Package | Description | Status |
 |---------|-------------|--------|
 | `@authrim/core` | Platform-agnostic core library | ✅ Available |
-| `@authrim/web` | Browser implementation | 🚧 Planned |
+| `@authrim/web` | Browser implementation | ✅ Available |
 | `@authrim/react` | React hooks and components | 🚧 Planned |
 | `@authrim/svelte` | Svelte/SvelteKit integration | 🚧 Planned |
 | `@authrim/vue` | Vue.js integration | 🚧 Planned |
@@ -45,14 +45,22 @@ These features are implemented in platform packages:
 
 ## Installation
 
-### For React Applications (Recommended)
+### For Browser Applications
+
+```bash
+npm install @authrim/web @authrim/core
+# or
+pnpm add @authrim/web @authrim/core
+```
+
+### For React Applications (Coming Soon)
 
 ```bash
 # Coming soon
 npm install @authrim/react
 ```
 
-### For Svelte/SvelteKit
+### For Svelte/SvelteKit (Coming Soon)
 
 ```bash
 # Coming soon
@@ -69,7 +77,36 @@ npm install @authrim/core
 
 ## Quick Start
 
-### With Framework Package (Recommended)
+### With @authrim/web (Browser)
+
+```typescript
+import { createAuthrim } from '@authrim/web';
+
+const auth = await createAuthrim({
+  issuer: 'https://your-idp.com',
+  clientId: 'your-client-id',
+});
+
+// Passkey login (BetterAuth-style { data, error } pattern)
+const { data, error } = await auth.passkey.login();
+if (error) {
+  console.error(error.message);
+  return;
+}
+console.log('User:', data.user);
+
+// Email code authentication
+const { data: sendResult } = await auth.emailCode.send('user@example.com');
+const { data: verifyResult } = await auth.emailCode.verify('user@example.com', '123456');
+
+// Social login
+const { data } = await auth.social.loginWithPopup('google');
+
+// Sign out
+await auth.signOut();
+```
+
+### With Framework Package (Coming Soon)
 
 ```tsx
 // React example (coming soon)
@@ -271,7 +308,7 @@ packages/
 │   │   ├── types/      # TypeScript types, error definitions
 │   │   └── utils/      # JWT, base64url utilities
 │   └── __tests__/
-├── web/            # Browser implementation (planned)
+├── web/            # Browser implementation (@authrim/web) ✅
 ├── react/          # React integration (planned)
 └── svelte/         # Svelte integration (planned)
 ```

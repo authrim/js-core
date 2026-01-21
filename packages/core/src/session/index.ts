@@ -14,3 +14,23 @@ export {
   type TokenApiClientOptions,
 } from './token-api.js';
 export { SessionManager, type SessionManagerOptions } from './manager.js';
+export {
+  SessionStateCalculator,
+  type SessionStateParams,
+  type SessionStateResult,
+  type SessionStateCalculatorOptions,
+} from './session-state.js';
+export {
+  FrontChannelLogoutUrlBuilder,
+  type FrontChannelLogoutUrlResult,
+  type FrontChannelLogoutBuildParams,
+  type FrontChannelLogoutValidationOptions,
+  type FrontChannelLogoutValidationResult,
+} from './front-channel-logout.js';
+export {
+  BackChannelLogoutValidator,
+  BACKCHANNEL_LOGOUT_EVENT,
+  type BackChannelLogoutErrorCode,
+  type BackChannelLogoutValidationOptions,
+  type BackChannelLogoutValidationResult,
+} from './back-channel-logout.js';
