@@ -354,7 +354,7 @@ export interface PasskeyLoginStartResponse {
  */
 export interface PasskeyLoginFinishRequest {
   challenge_id: string;
-  credential: AuthenticatorAssertionResponseJSON;
+  credential: AuthenticationResponseJSON;
   code_verifier: string;
 }
 
@@ -395,7 +395,7 @@ export interface PasskeySignupStartResponse {
  */
 export interface PasskeySignupFinishRequest {
   challenge_id: string;
-  credential: AuthenticatorAttestationResponseJSON;
+  credential: RegistrationResponseJSON;
   code_verifier: string;
 }
 
@@ -549,12 +549,52 @@ export interface AuthenticatorAssertionResponseJSON {
 }
 
 /**
- * AuthenticatorAttestationResponse as JSON
+ * AuthenticatorAttestationResponse as JSON (inner response part)
  */
 export interface AuthenticatorAttestationResponseJSON {
   clientDataJSON: string;
   attestationObject: string;
   transports?: AuthenticatorTransportType[];
+}
+
+/**
+ * Full RegistrationResponseJSON format (compatible with @simplewebauthn/server)
+ *
+ * This is the complete WebAuthn credential structure returned by navigator.credentials.create()
+ */
+export interface RegistrationResponseJSON {
+  /** Credential ID (base64url) */
+  id: string;
+  /** Credential ID (base64url, same as id) */
+  rawId: string;
+  /** Attestation response */
+  response: AuthenticatorAttestationResponseJSON;
+  /** Always 'public-key' */
+  type: 'public-key';
+  /** Client extension results */
+  clientExtensionResults: Record<string, unknown>;
+  /** Authenticator attachment type */
+  authenticatorAttachment?: 'platform' | 'cross-platform' | null;
+}
+
+/**
+ * Full AuthenticationResponseJSON format (compatible with @simplewebauthn/server)
+ *
+ * This is the complete WebAuthn credential structure returned by navigator.credentials.get()
+ */
+export interface AuthenticationResponseJSON {
+  /** Credential ID (base64url) */
+  id: string;
+  /** Credential ID (base64url, same as id) */
+  rawId: string;
+  /** Assertion response */
+  response: AuthenticatorAssertionResponseJSON;
+  /** Always 'public-key' */
+  type: 'public-key';
+  /** Client extension results */
+  clientExtensionResults: Record<string, unknown>;
+  /** Authenticator attachment type */
+  authenticatorAttachment?: 'platform' | 'cross-platform' | null;
 }
 
 // =============================================================================
@@ -635,4 +675,64 @@ export interface DirectAuthClient {
   social: SocialAuth;
   /** Session management */
   session: SessionAuth;
+}
+
+// =============================================================================
+// Silent Login Types (Cross-Domain SSO)
+// =============================================================================
+
+/**
+ * Silent Login options for cross-domain SSO
+ *
+ * Executes prompt=none via top-level navigation to check IdP session.
+ * Works with Safari ITP and Chrome Third-Party Cookie Phaseout.
+ */
+export interface TrySilentLoginOptions {
+  /**
+   * Behavior when IdP has no session (login_required error)
+   *
+   * - 'return': Return to original page (show login button, etc.)
+   * - 'login': Show login screen for user authentication
+   *
+   * Default: 'return'
+   */
+  onLoginRequired?: 'return' | 'login';
+
+  /**
+   * Return URL (used for both success and return scenarios)
+   * Default: current URL
+   */
+  returnTo?: string;
+
+  /**
+   * OAuth scopes (if additional scopes are needed)
+   */
+  scope?: string;
+}
+
+/**
+ * Silent Login result (used in callback page)
+ *
+ * error values follow OIDC standard error codes:
+ * - 'login_required': IdP has no session
+ * - 'interaction_required': User interaction needed
+ * - 'consent_required': Re-consent needed
+ * - 'invalid_return_to': Invalid returnTo URL (SDK-specific)
+ */
+export type SilentLoginResult =
+  | { status: 'success' }
+  | { status: 'login_required' }
+  | { status: 'error'; error: string; errorDescription?: string };
+
+/**
+ * Silent Login state data (stored in state parameter)
+ * @internal
+ */
+export interface SilentLoginStateData {
+  /** Type identifier: 'sl' = silent_login */
+  t: 'sl';
+  /** onLoginRequired: 'l' = login, 'r' = return */
+  lr: 'l' | 'r';
+  /** Return URL */
+  rt: string;
 }

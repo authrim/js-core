@@ -39,6 +39,10 @@ export type {
   SocialLoginOptions,
   // Session
   DirectAuthLogoutOptions,
+  // Silent Login (Cross-Domain SSO)
+  TrySilentLoginOptions,
+  SilentLoginResult,
+  SilentLoginStateData,
   // API Request/Response
   PasskeyLoginStartRequest,
   PasskeyLoginStartResponse,
@@ -61,6 +65,8 @@ export type {
   PublicKeyCredentialUserEntityJSON,
   AuthenticatorAssertionResponseJSON,
   AuthenticatorAttestationResponseJSON,
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
   // SDK Interface
   DirectAuthClientConfig,
   PasskeyAuth,

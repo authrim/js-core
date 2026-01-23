@@ -166,13 +166,6 @@ export {
   type FrontChannelLogoutValidationOptions,
   type FrontChannelLogoutValidationResult,
 } from './session/front-channel-logout.js';
-export {
-  BackChannelLogoutValidator,
-  BACKCHANNEL_LOGOUT_EVENT,
-  type BackChannelLogoutErrorCode,
-  type BackChannelLogoutValidationOptions,
-  type BackChannelLogoutValidationResult,
-} from './session/back-channel-logout.js';
 
 // Events
 export { EventEmitter } from './events/emitter.js';
@@ -342,6 +335,10 @@ export type {
   SocialLoginOptions,
   // Session
   DirectAuthLogoutOptions,
+  // Silent Login (Cross-Domain SSO)
+  TrySilentLoginOptions,
+  SilentLoginResult,
+  SilentLoginStateData,
   // API Request/Response
   PasskeyLoginStartRequest,
   PasskeyLoginStartResponse,
@@ -364,6 +361,8 @@ export type {
   PublicKeyCredentialUserEntityJSON,
   AuthenticatorAssertionResponseJSON,
   AuthenticatorAttestationResponseJSON,
+  RegistrationResponseJSON,
+  AuthenticationResponseJSON,
   // SDK Interface
   DirectAuthClientConfig,
   PasskeyAuth,

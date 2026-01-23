@@ -27,10 +27,3 @@ export {
   type FrontChannelLogoutValidationOptions,
   type FrontChannelLogoutValidationResult,
 } from './front-channel-logout.js';
-export {
-  BackChannelLogoutValidator,
-  BACKCHANNEL_LOGOUT_EVENT,
-  type BackChannelLogoutErrorCode,
-  type BackChannelLogoutValidationOptions,
-  type BackChannelLogoutValidationResult,
-} from './back-channel-logout.js';

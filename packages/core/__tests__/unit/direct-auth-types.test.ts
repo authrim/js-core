@@ -47,6 +47,9 @@ import {
   type DirectAuthClient,
   type PublicKeyCredentialRequestOptionsJSON,
   type PublicKeyCredentialCreationOptionsJSON,
+  type TrySilentLoginOptions,
+  type SilentLoginResult,
+  type SilentLoginStateData,
 } from '../../src/index.js';
 
 describe('Direct Auth Types', () => {
@@ -297,10 +300,16 @@ describe('Direct Auth Types', () => {
       const request: PasskeyLoginFinishRequest = {
         challenge_id: 'challenge-123',
         credential: {
-          clientDataJSON: 'base64url',
-          authenticatorData: 'base64url',
-          signature: 'base64url',
-          userHandle: 'base64url',
+          id: 'credentialId',
+          rawId: 'credentialId',
+          response: {
+            clientDataJSON: 'base64url',
+            authenticatorData: 'base64url',
+            signature: 'base64url',
+            userHandle: 'base64url',
+          },
+          type: 'public-key',
+          clientExtensionResults: {},
         },
         code_verifier: 'verifier-value',
       };
@@ -345,13 +354,19 @@ describe('Direct Auth Types', () => {
       const request: PasskeySignupFinishRequest = {
         challenge_id: 'challenge-123',
         credential: {
-          clientDataJSON: 'base64url',
-          attestationObject: 'base64url',
-          transports: ['internal'],
+          id: 'credentialId',
+          rawId: 'credentialId',
+          response: {
+            clientDataJSON: 'base64url',
+            attestationObject: 'base64url',
+            transports: ['internal'],
+          },
+          type: 'public-key',
+          clientExtensionResults: {},
         },
         code_verifier: 'verifier-value',
       };
-      expect(request.credential.attestationObject).toBe('base64url');
+      expect(request.credential.response.attestationObject).toBe('base64url');
     });
 
     it('should export PasskeySignupFinishResponse', () => {
@@ -572,6 +587,114 @@ describe('Direct Auth Types', () => {
         attestation: 'none',
       };
       expect(options.rp.name).toBe('Example App');
+    });
+  });
+
+  describe('Silent Login Types (Cross-Domain SSO)', () => {
+    it('should export TrySilentLoginOptions with all options', () => {
+      const options: TrySilentLoginOptions = {
+        onLoginRequired: 'return',
+        returnTo: 'https://app.example.com/dashboard',
+        scope: 'openid profile email',
+      };
+      expect(options.onLoginRequired).toBe('return');
+      expect(options.returnTo).toBe('https://app.example.com/dashboard');
+      expect(options.scope).toBe('openid profile email');
+    });
+
+    it('should export TrySilentLoginOptions with login action', () => {
+      const options: TrySilentLoginOptions = {
+        onLoginRequired: 'login',
+      };
+      expect(options.onLoginRequired).toBe('login');
+    });
+
+    it('should export TrySilentLoginOptions with minimal options', () => {
+      const options: TrySilentLoginOptions = {};
+      expect(options.onLoginRequired).toBeUndefined();
+      expect(options.returnTo).toBeUndefined();
+    });
+
+    it('should export SilentLoginResult with success status', () => {
+      const result: SilentLoginResult = { status: 'success' };
+      expect(result.status).toBe('success');
+    });
+
+    it('should export SilentLoginResult with login_required status', () => {
+      const result: SilentLoginResult = { status: 'login_required' };
+      expect(result.status).toBe('login_required');
+    });
+
+    it('should export SilentLoginResult with error status', () => {
+      const result: SilentLoginResult = {
+        status: 'error',
+        error: 'invalid_request',
+        errorDescription: 'Missing required parameter',
+      };
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).toBe('invalid_request');
+        expect(result.errorDescription).toBe('Missing required parameter');
+      }
+    });
+
+    it('should export SilentLoginResult error without description', () => {
+      const result: SilentLoginResult = {
+        status: 'error',
+        error: 'server_error',
+      };
+      expect(result.status).toBe('error');
+      if (result.status === 'error') {
+        expect(result.error).toBe('server_error');
+        expect(result.errorDescription).toBeUndefined();
+      }
+    });
+
+    it('should export SilentLoginStateData with return action', () => {
+      const stateData: SilentLoginStateData = {
+        t: 'sl',
+        lr: 'r',
+        rt: 'https://app.example.com/',
+      };
+      expect(stateData.t).toBe('sl');
+      expect(stateData.lr).toBe('r');
+      expect(stateData.rt).toBe('https://app.example.com/');
+    });
+
+    it('should export SilentLoginStateData with login action', () => {
+      const stateData: SilentLoginStateData = {
+        t: 'sl',
+        lr: 'l',
+        rt: 'https://app.example.com/dashboard?tab=settings',
+      };
+      expect(stateData.t).toBe('sl');
+      expect(stateData.lr).toBe('l');
+      expect(stateData.rt).toBe('https://app.example.com/dashboard?tab=settings');
+    });
+
+    it('should use discriminated union correctly for SilentLoginResult', () => {
+      const results: SilentLoginResult[] = [
+        { status: 'success' },
+        { status: 'login_required' },
+        { status: 'error', error: 'consent_required' },
+      ];
+
+      for (const result of results) {
+        switch (result.status) {
+          case 'success':
+            // TypeScript knows this is { status: 'success' }
+            expect(result.status).toBe('success');
+            break;
+          case 'login_required':
+            // TypeScript knows this is { status: 'login_required' }
+            expect(result.status).toBe('login_required');
+            break;
+          case 'error':
+            // TypeScript knows this has error property
+            expect(result.error).toBeDefined();
+            break;
+        }
+      }
     });
   });
 });
