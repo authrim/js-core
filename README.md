@@ -10,10 +10,10 @@ This monorepo contains the official client libraries for integrating with Authri
 |---------|-------------|--------|
 | `@authrim/core` | Platform-agnostic core library | ✅ Available |
 | `@authrim/web` | Browser implementation | ✅ Available |
+| `@authrim/sveltekit` | SvelteKit integration | ✅ Available |
 | `@authrim/react` | React hooks and components | 🚧 Planned |
-| `@authrim/svelte` | Svelte/SvelteKit integration | 🚧 Planned |
 | `@authrim/vue` | Vue.js integration | 🚧 Planned |
-| `@authrim/node` | Node.js server-side implementation | 🚧 Planned |
+| `@authrim/server` | Node.js server-side implementation | 🚧 Planned |
 
 **Note**: For most applications, you'll use a framework-specific package (e.g., `@authrim/react`) which includes `@authrim/core` as a dependency and provides platform-specific implementations.
 
@@ -60,11 +60,12 @@ pnpm add @authrim/web @authrim/core
 npm install @authrim/react
 ```
 
-### For Svelte/SvelteKit (Coming Soon)
+### For Svelte/SvelteKit
 
 ```bash
-# Coming soon
-npm install @authrim/svelte
+npm install @authrim/sveltekit @authrim/core
+# or
+pnpm add @authrim/sveltekit @authrim/core
 ```
 
 ### Core Only (Advanced)
@@ -310,7 +311,7 @@ packages/
 │   └── __tests__/
 ├── web/            # Browser implementation (@authrim/web) ✅
 ├── react/          # React integration (planned)
-└── svelte/         # Svelte integration (planned)
+└── sveltekit/      # SvelteKit integration (@authrim/sveltekit) ✅
 ```
 
 ## Requirements

@@ -1,0 +1,63 @@
+name: Publish to npm
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'packages/core/**'
+      - '.github/workflows/publish.yml'
+
+permissions:
+  id-token: write   # Required for OIDC trusted publishing
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm --filter @authrim/core build
+
+      - name: Run tests
+        run: pnpm --filter @authrim/core test
+
+      - name: Check if version changed
+        id: version-check
+        working-directory: packages/core
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          NPM_VERSION=$(npm view @authrim/core version 2>/dev/null || echo "0.0.0")
+          echo "package_version=$PACKAGE_VERSION" >> $GITHUB_OUTPUT
+          echo "npm_version=$NPM_VERSION" >> $GITHUB_OUTPUT
+          if [ "$PACKAGE_VERSION" != "$NPM_VERSION" ]; then
+            echo "should_publish=true" >> $GITHUB_OUTPUT
+            echo "📦 Version changed: $NPM_VERSION → $PACKAGE_VERSION"
+          else
+            echo "should_publish=false" >> $GITHUB_OUTPUT
+            echo "✅ Version unchanged: $PACKAGE_VERSION"
+          fi
+
+      - name: Publish to npm
+        if: steps.version-check.outputs.should_publish == 'true'
+        working-directory: packages/core
+        run: npm publish --access public --provenance
