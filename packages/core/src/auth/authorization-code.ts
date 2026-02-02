@@ -13,6 +13,7 @@ import type { PKCEPair } from './pkce.js';
 import { AuthrimError } from '../types/errors.js';
 import { getIdTokenNonce } from '../utils/jwt.js';
 import { timingSafeEqual } from '../utils/timing-safe.js';
+import type { IDiagnosticLogger } from '../debug/diagnostic-logger.js';
 
 /**
  * Options for building authorization URL
@@ -108,10 +109,19 @@ export interface ExchangeCodeOptions {
  * Authorization Code Flow helper
  */
 export class AuthorizationCodeFlow {
+  private diagnosticLogger?: IDiagnosticLogger | null;
+
   constructor(
     private readonly http: HttpClient,
     private readonly clientId: string
   ) {}
+
+  /**
+   * Set diagnostic logger for this flow
+   */
+  setDiagnosticLogger(logger: IDiagnosticLogger | null | undefined): void {
+    this.diagnosticLogger = logger;
+  }
 
   /**
    * Build authorization URL
@@ -328,17 +338,44 @@ export class AuthorizationCodeFlow {
     // Validate nonce in ID token (using constant-time comparison to prevent timing attacks)
     if (tokenResponse.id_token) {
       const idTokenNonce = getIdTokenNonce(tokenResponse.id_token);
+
       // Security: nonce MUST be present in id_token when it was sent in the request
       if (idTokenNonce === undefined) {
+        // Log diagnostic
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'nonce-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: 'nonce claim present',
+          actual: 'nonce claim missing',
+          errorMessage: 'ID token nonce claim is missing but was sent in authorization request',
+        });
+
         throw new AuthrimError(
           'missing_nonce',
           'ID token nonce claim is missing but was sent in authorization request'
         );
       }
+
       if (!timingSafeEqual(idTokenNonce, options.nonce)) {
+        // Log diagnostic (without exposing nonce values)
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'nonce-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          errorMessage: 'ID token nonce does not match expected value',
+        });
+
         // Do not include nonce values in error details (security sensitive)
         throw new AuthrimError('nonce_mismatch', 'ID token nonce does not match expected value');
       }
+
+      // Log successful nonce validation
+      this.diagnosticLogger?.logTokenValidation({
+        step: 'nonce-check',
+        tokenType: 'id_token',
+        result: 'pass',
+      });
     }
 
     // Calculate expiresAt (epoch seconds)
@@ -354,6 +391,19 @@ export class AuthorizationCodeFlow {
       idToken: tokenResponse.id_token,
       scope: tokenResponse.scope,
     };
+
+    // Log successful authentication
+    this.diagnosticLogger?.logAuthDecision({
+      decision: 'allow',
+      reason: 'Token exchange successful and ID token validation passed',
+      flow: 'authorization_code',
+      context: {
+        hasAccessToken: !!tokenSet.accessToken,
+        hasRefreshToken: !!tokenSet.refreshToken,
+        hasIdToken: !!tokenSet.idToken,
+        scope: tokenSet.scope,
+      },
+    });
 
     return tokenSet;
   }

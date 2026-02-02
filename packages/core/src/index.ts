@@ -233,6 +233,17 @@ export {
   type DebugLogger,
   type DebugLogLevel,
   type RedactLevel,
+  // Diagnostic Logger
+  DiagnosticLogger,
+  createDiagnosticLogger,
+  type IDiagnosticLogger,
+  type DiagnosticLogLevel,
+  type TokenValidationStep,
+  type BaseDiagnosticLogEntry,
+  type TokenValidationLogEntry,
+  type AuthDecisionLogEntry,
+  type DiagnosticLogEntry,
+  type DiagnosticLoggerOptions,
 } from './debug/index.js';
 
 // Types

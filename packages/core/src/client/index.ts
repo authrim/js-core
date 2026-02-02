@@ -37,6 +37,7 @@ import { TokenApiClient } from '../session/token-api.js';
 import { SessionManager } from '../session/manager.js';
 import { base64urlEncode } from '../utils/base64url.js';
 import { AuthrimError } from '../types/errors.js';
+import type { IDiagnosticLogger } from '../debug/diagnostic-logger.js';
 
 /**
  * Hash a value for use in storage keys
@@ -112,6 +113,9 @@ export class AuthrimClient {
 
   /** Whether the client has been initialized */
   private initialized = false;
+
+  /** Diagnostic logger (optional, for OIDF conformance testing) */
+  private diagnosticLogger: IDiagnosticLogger | null = null;
 
   /**
    * Get the event emitter for subscribing to SDK events
@@ -763,6 +767,37 @@ export class AuthrimClient {
     }
 
     return this.logoutHandler.logout(discovery, options);
+  }
+
+  // ============================================================
+  // Diagnostic Logging
+  // ============================================================
+
+  /**
+   * Set diagnostic logger for OIDF conformance testing
+   *
+   * When a diagnostic logger is set, the SDK will log token validation steps,
+   * authentication decisions, and other diagnostic information.
+   *
+   * @param logger - Diagnostic logger instance (or null to disable)
+   */
+  setDiagnosticLogger(logger: IDiagnosticLogger | null): void {
+    this.diagnosticLogger = logger;
+
+    // Set diagnostic logger on authorization code flow
+    this.authCodeFlow.setDiagnosticLogger(logger);
+  }
+
+  /**
+   * Get diagnostic session ID (if diagnostic logging is enabled)
+   *
+   * This ID should be sent to the server via X-Diagnostic-Session-Id header
+   * to correlate SDK logs with server logs.
+   *
+   * @returns Diagnostic session ID or null if diagnostic logging is disabled
+   */
+  getDiagnosticSessionId(): string | null {
+    return this.diagnosticLogger?.getDiagnosticSessionId() ?? null;
   }
 
   // ============================================================

@@ -13,7 +13,7 @@ This monorepo contains the official client libraries for integrating with Authri
 | `@authrim/sveltekit` | SvelteKit integration | ✅ Available |
 | `@authrim/react` | React hooks and components | 🚧 Planned |
 | `@authrim/vue` | Vue.js integration | 🚧 Planned |
-| `@authrim/server` | Node.js server-side implementation | 🚧 Planned |
+| `@authrim/server` | Node.js server-side implementation | ✅ Available |
 
 **Note**: For most applications, you'll use a framework-specific package (e.g., `@authrim/react`) which includes `@authrim/core` as a dependency and provides platform-specific implementations.
 

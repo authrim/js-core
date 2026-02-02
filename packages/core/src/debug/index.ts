@@ -17,3 +17,19 @@ export type {
   DebugLogLevel,
   RedactLevel,
 } from './types.js';
+
+// Diagnostic Logger (for debugging and OIDF conformance testing)
+export {
+  DiagnosticLogger,
+  createDiagnosticLogger,
+} from './diagnostic-logger.js';
+export type {
+  IDiagnosticLogger,
+  DiagnosticLogLevel,
+  TokenValidationStep,
+  BaseDiagnosticLogEntry,
+  TokenValidationLogEntry,
+  AuthDecisionLogEntry,
+  DiagnosticLogEntry,
+  DiagnosticLoggerOptions,
+} from './diagnostic-logger.js';
