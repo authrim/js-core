@@ -161,6 +161,24 @@ export interface DiagnosticLoggerOptions {
 
   /** Maximum number of logs to collect (default: 1000) */
   maxLogs?: number;
+
+  /** Send logs to server (default: false) */
+  sendToServer?: boolean;
+
+  /** Server URL for sending logs */
+  serverUrl?: string;
+
+  /** Client ID for authentication */
+  clientId?: string;
+
+  /** Client secret for authentication (confidential clients only) */
+  clientSecret?: string;
+
+  /** Batch size for sending logs (default: 50) */
+  batchSize?: number;
+
+  /** Flush interval in milliseconds (default: 5000) */
+  flushIntervalMs?: number;
 }
 
 /**
@@ -174,12 +192,44 @@ export class DiagnosticLogger implements IDiagnosticLogger {
   private maxLogs: number;
   private logs: DiagnosticLogEntry[] = [];
 
+  // Server sending options
+  private sendToServer: boolean;
+  private serverUrl?: string;
+  private clientId?: string;
+  private clientSecret?: string;
+  private batchSize: number;
+  private flushIntervalMs: number;
+
+  // Buffering for batch sending
+  private sendBuffer: DiagnosticLogEntry[] = [];
+  private flushTimer?: ReturnType<typeof setTimeout>;
+  private isFlushing = false;
+
   constructor(options: DiagnosticLoggerOptions) {
     this.diagnosticSessionId = this.generateSessionId();
     this.enabled = options.enabled;
     this.debugLogger = options.debugLogger;
     this.collectLogs = options.collectLogs ?? false;
     this.maxLogs = options.maxLogs ?? 1000;
+
+    // Server sending options
+    this.sendToServer = options.sendToServer ?? false;
+    this.serverUrl = options.serverUrl;
+    this.clientId = options.clientId;
+    this.clientSecret = options.clientSecret;
+    this.batchSize = options.batchSize ?? 50;
+    this.flushIntervalMs = options.flushIntervalMs ?? 5000;
+
+    // Validate server sending config
+    if (this.sendToServer && (!this.serverUrl || !this.clientId)) {
+      if (this.debugLogger) {
+        this.debugLogger.log(
+          'warn',
+          '[DIAGNOSTIC] sendToServer is enabled but serverUrl or clientId is missing. Server sending disabled.'
+        );
+      }
+      this.sendToServer = false;
+    }
   }
 
   /**
@@ -279,6 +329,13 @@ export class DiagnosticLogger implements IDiagnosticLogger {
   }
 
   /**
+   * Get buffered logs count (for debugging)
+   */
+  getBufferedLogsCount(): number {
+    return this.sendBuffer.length;
+  }
+
+  /**
    * Write log entry (internal)
    */
   private writeLog(entry: DiagnosticLogEntry): void {
@@ -294,6 +351,114 @@ export class DiagnosticLogger implements IDiagnosticLogger {
       // Trim if exceeds max
       if (this.logs.length > this.maxLogs) {
         this.logs.shift();
+      }
+    }
+
+    // Buffer for server sending
+    if (this.sendToServer) {
+      this.bufferLog(entry);
+    }
+  }
+
+  /**
+   * Buffer log entry for batch sending
+   */
+  private bufferLog(entry: DiagnosticLogEntry): void {
+    this.sendBuffer.push(entry);
+
+    // Flush if batch size reached
+    if (this.sendBuffer.length >= this.batchSize) {
+      void this.flush();
+    } else {
+      // Schedule flush
+      this.scheduleFlush();
+    }
+  }
+
+  /**
+   * Schedule automatic flush
+   */
+  private scheduleFlush(): void {
+    // Clear existing timer
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+    }
+
+    // Set new timer
+    this.flushTimer = setTimeout(() => {
+      void this.flush();
+    }, this.flushIntervalMs);
+  }
+
+  /**
+   * Flush buffered logs to server
+   */
+  async flush(): Promise<void> {
+    // Skip if already flushing or buffer is empty
+    if (this.isFlushing || this.sendBuffer.length === 0) {
+      return;
+    }
+
+    // Clear scheduled flush
+    if (this.flushTimer) {
+      clearTimeout(this.flushTimer);
+      this.flushTimer = undefined;
+    }
+
+    this.isFlushing = true;
+
+    // Take logs from buffer
+    const logsToSend = [...this.sendBuffer];
+    this.sendBuffer = [];
+
+    try {
+      const response = await fetch(`${this.serverUrl}/api/v1/diagnostic-logs/ingest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Diagnostic-Session-Id': this.diagnosticSessionId,
+        },
+        body: JSON.stringify({
+          logs: logsToSend,
+          client_id: this.clientId,
+          client_secret: this.clientSecret,
+        }),
+      });
+
+      if (!response.ok) {
+        this.handleSendFailure(logsToSend, `HTTP ${response.status}: ${response.statusText}`);
+      } else {
+        if (this.debugLogger) {
+          this.debugLogger.log('debug', `[DIAGNOSTIC] Sent ${logsToSend.length} logs to server`);
+        }
+      }
+    } catch (error) {
+      this.handleSendFailure(logsToSend, error instanceof Error ? error.message : String(error));
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+
+  /**
+   * Handle send failure
+   */
+  private handleSendFailure(logs: DiagnosticLogEntry[], reason: string): void {
+    if (this.debugLogger) {
+      this.debugLogger.log('warn', `[DIAGNOSTIC] Failed to send logs to server: ${reason}`);
+    }
+
+    // If collectLogs is enabled, keep logs locally
+    if (this.collectLogs) {
+      for (const log of logs) {
+        // Add to local collection if not already there
+        if (!this.logs.some((l) => l.id === log.id)) {
+          this.logs.push(log);
+
+          // Trim if exceeds max
+          if (this.logs.length > this.maxLogs) {
+            this.logs.shift();
+          }
+        }
       }
     }
   }
@@ -329,9 +494,7 @@ export class DiagnosticLogger implements IDiagnosticLogger {
  * @param options - Logger options
  * @returns DiagnosticLogger instance or null if disabled
  */
-export function createDiagnosticLogger(
-  options: DiagnosticLoggerOptions
-): DiagnosticLogger | null {
+export function createDiagnosticLogger(options: DiagnosticLoggerOptions): DiagnosticLogger | null {
   if (!options.enabled) {
     return null;
   }
