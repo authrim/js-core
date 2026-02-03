@@ -1,6 +1,6 @@
 {
   "name": "@authrim/core",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Authrim SDK Core - Platform-agnostic authentication client",
   "type": "module",
   "exports": {
