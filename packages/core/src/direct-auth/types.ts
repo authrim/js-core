@@ -459,6 +459,8 @@ export interface DirectAuthTokenRequest {
   code: string;
   client_id: string;
   code_verifier: string;
+  /** External IdP provider ID (required for social/external flows) */
+  provider_id?: string;
   /** Whether to request refresh token (for SPA opt-in) */
   request_refresh_token?: boolean;
 }
