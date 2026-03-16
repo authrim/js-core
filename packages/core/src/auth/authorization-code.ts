@@ -11,8 +11,9 @@ import type { TokenSet, TokenResponse } from '../types/token.js';
 import type { AuthState } from './state.js';
 import type { PKCEPair } from './pkce.js';
 import { AuthrimError } from '../types/errors.js';
-import { getIdTokenNonce } from '../utils/jwt.js';
+import { getIdTokenNonce, decodeIdToken, isJwtExpired } from '../utils/jwt.js';
 import { timingSafeEqual } from '../utils/timing-safe.js';
+import { normalizeIssuer } from '../client/discovery.js';
 import type { IDiagnosticLogger } from '../debug/diagnostic-logger.js';
 
 /**
@@ -333,6 +334,104 @@ export class AuthorizationCodeFlow {
         'missing_id_token',
         'ID token required when openid scope is requested but was not returned by the server'
       );
+    }
+
+    // Validate ID token claims (OIDC Core 1.0 §3.1.3.7)
+    if (tokenResponse.id_token) {
+      let claims;
+      try {
+        claims = decodeIdToken(tokenResponse.id_token);
+      } catch {
+        this.diagnosticLogger?.logAuthDecision({
+          decision: 'deny',
+          reason: 'id_token_decode_failed',
+          flow: 'authorization_code',
+        });
+        throw new AuthrimError('invalid_id_token', 'Failed to decode ID token');
+      }
+
+      // 1. Issuer check: iss MUST match the expected issuer (§3.1.3.7 #2)
+      const expectedIssuer = normalizeIssuer(discovery.issuer);
+      const actualIssuer = normalizeIssuer(claims.iss ?? '');
+      if (actualIssuer !== expectedIssuer) {
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'issuer-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: expectedIssuer,
+          actual: actualIssuer,
+          errorMessage: 'ID token issuer does not match expected issuer',
+        });
+        throw new AuthrimError(
+          'invalid_issuer',
+          `ID token issuer mismatch: expected "${expectedIssuer}", got "${actualIssuer}"`
+        );
+      }
+      this.diagnosticLogger?.logTokenValidation({
+        step: 'issuer-check',
+        tokenType: 'id_token',
+        result: 'pass',
+        expected: expectedIssuer,
+        actual: actualIssuer,
+      });
+
+      // 2. Audience check: aud MUST contain client_id (§3.1.3.7 #3)
+      const aud = claims.aud;
+      const audList = Array.isArray(aud) ? aud : [aud];
+      if (!audList.includes(this.clientId)) {
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'audience-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: this.clientId,
+          actual: audList,
+          errorMessage: 'ID token audience does not contain client_id',
+        });
+        throw new AuthrimError(
+          'invalid_audience',
+          `ID token audience does not contain client_id "${this.clientId}"`
+        );
+      }
+      this.diagnosticLogger?.logTokenValidation({
+        step: 'audience-check',
+        tokenType: 'id_token',
+        result: 'pass',
+        expected: this.clientId,
+        actual: audList,
+      });
+
+      // 3. Expiry check: current time MUST be before exp (§3.1.3.7 #9)
+      const now = Math.floor(Date.now() / 1000);
+      if (isJwtExpired(claims)) {
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'expiry-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: `exp > ${now}`,
+          actual: claims.exp,
+          errorMessage: 'ID token has expired',
+        });
+        throw new AuthrimError('token_expired', 'ID token has expired');
+      }
+      this.diagnosticLogger?.logTokenValidation({
+        step: 'expiry-check',
+        tokenType: 'id_token',
+        result: 'pass',
+        actual: claims.exp,
+      });
+
+      // 4. Signature check: per OIDC spec §3.1.3.7 #6, when the ID Token is received
+      // via direct TLS-protected communication with the Token Endpoint (authorization code flow),
+      // TLS server validation may be used in place of checking the token signature.
+      this.diagnosticLogger?.logTokenValidation({
+        step: 'signature-check',
+        tokenType: 'id_token',
+        result: 'pass',
+        details: {
+          method: 'tls-backchannel',
+          note: 'Signature verification delegated to TLS (OIDC Core §3.1.3.7 #6): token received via authenticated token endpoint',
+        },
+      });
     }
 
     // Validate nonce in ID token (using constant-time comparison to prevent timing attacks)

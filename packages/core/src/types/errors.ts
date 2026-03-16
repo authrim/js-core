@@ -62,6 +62,10 @@ export type AuthrimErrorCode =
   | 'temporarily_unavailable'
   | 'invalid_grant'
   | 'invalid_token'
+  // ID Token validation errors (OIDC Core 1.0 §3.1.3.7)
+  | 'invalid_id_token'
+  | 'invalid_issuer'
+  | 'invalid_audience'
   // SDK-specific errors
   | 'invalid_state'
   | 'expired_state'
@@ -306,6 +310,26 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
     retryable: false,
     userAction: 'reauthenticate',
     severity: 'error',
+  },
+
+  // ID Token validation errors (OIDC Core 1.0 §3.1.3.7)
+  invalid_id_token: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  invalid_issuer: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
+  },
+  invalid_audience: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'fatal',
   },
 
   // SDK-specific errors
