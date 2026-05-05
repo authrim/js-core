@@ -116,6 +116,10 @@ export interface OIDCDiscoveryDocument {
   /** DPoP signing algorithms supported (OPTIONAL) */
   dpop_signing_alg_values_supported?: string[];
 
+  // OIDC Native SSO
+  /** Canonical Phase 1 Native SSO capability flag */
+  native_sso_supported?: boolean;
+
   // JAR (RFC 9101)
   /** Whether signed request object is required (OPTIONAL) */
   require_signed_request_object?: boolean;

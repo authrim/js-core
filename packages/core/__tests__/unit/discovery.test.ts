@@ -85,6 +85,48 @@ describe('Discovery Client', () => {
     });
   });
 
+  describe('Native SSO discovery compatibility', () => {
+    it('should reject legacy Native SSO discovery fields without canonical support flag', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: {
+          ...createMockDiscoveryDocument(issuer),
+          native_sso_token_exchange_supported: true,
+          native_sso_device_secret_supported: true,
+        },
+      }));
+
+      await expect(discovery.discover(issuer)).rejects.toMatchObject({
+        code: 'legacy_native_sso_discovery_unsupported',
+        errorUri:
+          'https://docs.authrim.com/errors/error-codes#legacy-native-sso-discovery-unsupported',
+        details: {
+          legacyFields: [
+            'native_sso_token_exchange_supported',
+            'native_sso_device_secret_supported',
+          ],
+        },
+      });
+    });
+
+    it('should allow mixed deployments when native_sso_supported is present', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: {
+          ...createMockDiscoveryDocument(issuer),
+          native_sso_supported: true,
+          native_sso_token_exchange_supported: false,
+        },
+      }));
+
+      const doc = await discovery.discover(issuer);
+
+      expect(doc.native_sso_supported).toBe(true);
+    });
+  });
+
   describe('Caching', () => {
     it('should cache discovery document within TTL', async () => {
       http.setHandler(() => ({

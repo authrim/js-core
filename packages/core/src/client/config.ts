@@ -5,6 +5,7 @@
 import type { HttpClient } from '../providers/http.js';
 import type { CryptoProvider } from '../providers/crypto.js';
 import type { AuthrimStorage } from '../providers/storage.js';
+import type { DPoPAlgorithm } from '../types/dpop.js';
 
 /**
  * Endpoint overrides
@@ -33,6 +34,19 @@ export interface HashOptions {
    * Alternative: 22 characters (132 bits) for lower collision risk
    */
   hashLength?: number;
+}
+
+/**
+ * DPoP options.
+ */
+export interface DPoPOptions {
+  /**
+   * Attach DPoP proofs to token endpoint requests such as authorization-code
+   * exchange. Browser public clients in strict mode should enable this.
+   */
+  tokenRequests?: boolean;
+  /** DPoP signing algorithm. Browser Phase 1 default is ES256. */
+  algorithm?: DPoPAlgorithm;
 }
 
 /**
@@ -131,17 +145,26 @@ export interface AuthrimClientConfig {
    * Hash options for storage key generation
    */
   hashOptions?: HashOptions;
+
+  /**
+   * DPoP configuration.
+   *
+   * Default: disabled for platform-neutral core clients. Browser SDKs enable
+   * token request DPoP for strict browser-held token paths.
+   */
+  dpop?: DPoPOptions;
 }
 
 /**
  * Resolved configuration with defaults applied
  */
 export interface ResolvedConfig extends Required<
-  Omit<AuthrimClientConfig, 'endpoints' | 'redirectUri' | 'hashOptions'>
+  Omit<AuthrimClientConfig, 'endpoints' | 'redirectUri' | 'hashOptions' | 'dpop'>
 > {
   endpoints?: EndpointOverrides;
   redirectUri?: string;
   hashOptions: Required<HashOptions>;
+  dpop: Required<DPoPOptions>;
 }
 
 /**
@@ -157,6 +180,10 @@ export function resolveConfig(config: AuthrimClientConfig): ResolvedConfig {
     stateTtlSeconds: config.stateTtlSeconds ?? 600,
     hashOptions: {
       hashLength: config.hashOptions?.hashLength ?? 16,
+    },
+    dpop: {
+      tokenRequests: config.dpop?.tokenRequests ?? false,
+      algorithm: config.dpop?.algorithm ?? 'ES256',
     },
   };
 }

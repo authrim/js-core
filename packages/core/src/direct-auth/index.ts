@@ -21,6 +21,7 @@ export type {
   // Common
   SocialProvider,
   MfaMethod,
+  DirectAuthChannel,
   User,
   Session,
   NextAction,
@@ -38,6 +39,7 @@ export type {
   // Social
   SocialLoginOptions,
   // Session
+  DirectAuthLogoutScope,
   DirectAuthLogoutOptions,
   // Silent Login (Cross-Domain SSO)
   TrySilentLoginOptions,

@@ -20,7 +20,12 @@ export {
 export { DiscoveryClient, normalizeIssuer } from './client/discovery.js';
 
 // Provider interfaces
-export { type HttpClient, type HttpOptions, type HttpResponse, type OAuthErrorResponse } from './providers/http.js';
+export {
+  type HttpClient,
+  type HttpOptions,
+  type HttpResponse,
+  type OAuthErrorResponse,
+} from './providers/http.js';
 export { type CryptoProvider } from './providers/crypto.js';
 export { type AuthrimStorage } from './providers/storage.js';
 
@@ -46,18 +51,10 @@ export {
   type SilentAuthResult,
 } from './auth/silent-auth.js';
 export { PARClient } from './auth/par.js';
-export type {
-  PARRequest,
-  PARResponse,
-  PARResult,
-  PARClientOptions,
-} from './types/par.js';
+export type { PARRequest, PARResponse, PARResult, PARClientOptions } from './types/par.js';
 
 // Client Authentication
-export {
-  buildClientAuthentication,
-  type ClientAuthResult,
-} from './auth/client-auth.js';
+export { buildClientAuthentication, type ClientAuthResult } from './auth/client-auth.js';
 export {
   ClientCredentialsClient,
   type ClientCredentialsClientOptions,
@@ -74,6 +71,21 @@ export type {
 
 // Device Flow
 export { DeviceFlowClient } from './auth/device-flow.js';
+export { StepUpClient } from './step-up/index.js';
+export {
+  DeviceInventoryClient,
+  type DeviceInventoryClientOptions,
+  type DeviceInventoryFailureBody,
+  type DeviceInventoryItem,
+  type DeviceInventoryRequestOptions,
+  type DeviceUnlinkResult,
+  type ListDevicesOptions,
+  type ListDevicesResponse,
+  type RenameDeviceOptions,
+  type RenameDeviceResponse,
+  type UnlinkDeviceOptions,
+  type UnlinkDeviceResponse,
+} from './devices/index.js';
 export type {
   DeviceAuthorizationResponse,
   DeviceFlowState,
@@ -91,6 +103,7 @@ export { DPoPManager } from './security/dpop.js';
 export type {
   JWK,
   DPoPKeyPair,
+  DPoPAlgorithm,
   DPoPProofHeader,
   DPoPProofClaims,
   DPoPProofOptions,
@@ -98,11 +111,7 @@ export type {
   DPoPCryptoProvider,
 } from './types/dpop.js';
 export { JARBuilder, isJarRequired } from './security/jar.js';
-export type {
-  JARRequestObjectClaims,
-  JARBuilderConfig,
-  JARRequestOptions,
-} from './types/jar.js';
+export type { JARRequestObjectClaims, JARBuilderConfig, JARRequestOptions } from './types/jar.js';
 export { JARMValidator } from './security/jarm.js';
 export type {
   JARMResponseClaims,
@@ -143,6 +152,7 @@ export {
 // Session
 export {
   LogoutHandler,
+  type LogoutScope,
   type LogoutOptions,
   type LogoutResult,
   type LogoutHandlerOptions,
@@ -250,6 +260,7 @@ export {
 export {
   AuthrimError,
   getErrorMeta,
+  isAuthrimErrorCode,
   classifyError,
   isRetryableError,
   emitClassifiedError,
@@ -260,9 +271,46 @@ export {
   type AuthrimErrorSeverity,
   type AuthrimErrorRemediation,
   type ErrorClassification,
+  type Phase1ErrorDetails,
+  type Phase1ErrorDetailSeverity,
+  type Phase1ErrorDetailUserAction,
+  type StepUpActionStatus,
+  type StepUpErrorDetailCode,
+  type StepUpErrorResponseBody,
+  type StepUpInputState,
+  type StepUpPreferredMethod,
+  type StepUpStatusObject,
   type ErrorEventEmitter,
   type EmitClassifiedErrorOptions,
 } from './types/errors.js';
+export {
+  DEFAULT_STEP_UP_POLICY,
+  type StepUpAcceptableMethods,
+  type StepUpActionResponse,
+  type StepUpCompleteRequest,
+  type StepUpFailureBody,
+  type StepUpNextAction,
+  type StepUpRequirement,
+  type StepUpResendResponse,
+  type StepUpStartRequest,
+} from './types/step-up.js';
+export type {
+  StepUpClientOptions,
+  StepUpIdempotentRequestOptions,
+  StepUpRequestOptions,
+} from './step-up/index.js';
+export {
+  CustomerProfileClient,
+  type CustomerProfileClientOptions,
+  type CustomerProfileDelegatedWriteOptions,
+  type CustomerProfileDelegatedWriteResponse,
+  type CustomerProfileElevationReadOptions,
+  type CustomerProfileElevationReadResponse,
+  type CustomerProfileFailureBody,
+  type CustomerProfileRequestOptions,
+  type CustomerProfileUpdateInput,
+  type CustomerProfileView,
+} from './product/index.js';
 export type {
   OIDCDiscoveryDocument,
   UserInfo,
@@ -274,6 +322,7 @@ export {
   type TokenSet,
   type TokenResponse,
   type TokenExchangeRequest,
+  type NativeSSOTokenExchangeRequest,
   type TokenExchangeResponse,
   type TokenExchangeResult,
   type TokenTypeUri,
@@ -310,6 +359,23 @@ export {
   parseRetryAfterHeader,
   type RetryOptions,
 } from './utils/retry.js';
+export {
+  assertValidIdempotencyKey,
+  createIdempotencyKey,
+  resolveIdempotencyKey,
+  withIdempotencyKeyHeader,
+  type IdempotencyKeyInput,
+  type IdempotencyKeyOptions,
+} from './utils/idempotency.js';
+export {
+  assertValidStepUpReceipt,
+  createDelegatedWriteEnvelope,
+  normalizeDelegatedWriteAudit,
+  withStepUpReceiptHeader,
+  type DelegatedWriteAudit,
+  type DelegatedWriteEnvelope,
+  type DelegatedWriteEnvelopeOptions,
+} from './utils/delegated-write.js';
 
 // Direct Auth
 export type {
@@ -328,6 +394,7 @@ export type {
   // Common
   SocialProvider,
   MfaMethod,
+  DirectAuthChannel,
   User,
   Session,
   NextAction,
@@ -345,6 +412,7 @@ export type {
   // Social
   SocialLoginOptions,
   // Session
+  DirectAuthLogoutScope,
   DirectAuthLogoutOptions,
   // Silent Login (Cross-Domain SSO)
   TrySilentLoginOptions,

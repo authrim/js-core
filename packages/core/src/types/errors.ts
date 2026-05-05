@@ -8,6 +8,7 @@
 export type AuthrimErrorUserAction =
   | 'retry'
   | 'reauthenticate'
+  | 'update_client'
   | 'contact_support'
   | 'check_network'
   | 'none';
@@ -27,6 +28,7 @@ export type AuthrimErrorRemediation =
   | 'retry'              // Retry the same operation
   | 'reauthenticate'     // Re-authentication required
   | 'switch_flow'        // Switch to different flow (e.g., popup → redirect)
+  | 'update_client'      // SDK / client upgrade required
   | 'contact_support'    // Contact support
   | 'none';              // No action needed (informational)
 
@@ -46,6 +48,78 @@ export interface AuthrimErrorMeta {
   userAction: AuthrimErrorUserAction;
   /** Error severity level */
   severity: AuthrimErrorSeverity;
+}
+
+export type Phase1ErrorDetailUserAction =
+  | 'retry'
+  | 'reauthenticate'
+  | 'update_client'
+  | 'contact_support'
+  | 'none';
+
+export type Phase1ErrorDetailSeverity = 'warning' | 'error' | 'fatal';
+
+export interface StepUpInputState {
+  field?: string;
+  attempts_remaining?: number;
+  max_attempts?: number;
+  retry_after_seconds?: number;
+  [key: string]: unknown;
+}
+
+export type StepUpActionStatus = 'pending' | 'completed' | 'failed' | 'expired' | 'canceled';
+
+export interface StepUpPreferredMethod {
+  category?: string;
+  method?: string;
+}
+
+export interface StepUpStatusObject {
+  action_id?: string;
+  status: StepUpActionStatus;
+  method?: string;
+  category?: string;
+  preferred_method?: StepUpPreferredMethod;
+  updated_at?: string;
+  updated_at_unix?: number;
+  attempts_remaining?: number;
+  max_attempts?: number;
+  resend_available_at?: string;
+  resend_available_at_unix?: number;
+  resends_remaining?: number;
+  expires_at?: string;
+  expires_at_unix?: number;
+  [key: string]: unknown;
+}
+
+export type StepUpErrorDetailCode =
+  | 'step_up_required'
+  | 'preferred_method_unavailable'
+  | 'invalid_step_up_input'
+  | 'step_up_attempts_exhausted'
+  | 'resend_limit_exceeded'
+  | 'user_canceled'
+  | 'idempotency_conflict';
+
+export interface Phase1ErrorDetails<Code extends string = string> {
+  code: Code;
+  retryable: boolean;
+  severity: Phase1ErrorDetailSeverity;
+  user_action?: Phase1ErrorDetailUserAction;
+  transient?: boolean;
+  field?: string;
+  input_state?: StepUpInputState;
+  [key: string]: unknown;
+}
+
+export interface StepUpErrorResponseBody {
+  error: string;
+  error_description?: string;
+  error_details: Phase1ErrorDetails<StepUpErrorDetailCode>;
+  step_up?: unknown;
+  status?: StepUpStatusObject;
+  input_state?: StepUpInputState;
+  next_action?: unknown;
 }
 
 /**
@@ -103,6 +177,23 @@ export type AuthrimErrorCode =
   | 'revocation_error'
   | 'no_introspection_endpoint'
   | 'no_revocation_endpoint'
+  | 'invalid_cursor'
+  | 'unknown_audit_field'
+  | 'revoke_disabled'
+  | 'introspection_disabled'
+  | 'unauthorized_introspection_caller'
+  // Step-Up / delegated write errors
+  | 'step_up_required'
+  | 'preferred_method_unavailable'
+  | 'invalid_step_up_input'
+  | 'step_up_attempts_exhausted'
+  | 'resend_limit_exceeded'
+  | 'user_canceled'
+  | 'idempotency_conflict'
+  | 'legacy_app_suite_not_supported'
+  | 'legacy_native_sso_discovery_unsupported'
+  | 'legacy_endpoint_not_supported'
+  | 'legacy_passkey_error_unsupported'
   // Silent auth errors (OIDC prompt=none)
   | 'login_required'
   | 'interaction_required'
@@ -116,11 +207,13 @@ export type AuthrimErrorCode =
   | 'invalid_response'
   | 'invalid_callback'
   // Direct Auth errors
-  | 'passkey_not_found'
-  | 'passkey_verification_failed'
   | 'passkey_not_supported'
-  | 'passkey_cancelled'
   | 'passkey_invalid_credential'
+  | 'passkey_user_canceled'
+  | 'passkey_timeout'
+  | 'passkey_not_allowed'
+  | 'passkey_uv_required'
+  | 'passkey_no_credential'
   | 'email_code_invalid'
   | 'email_code_expired'
   | 'email_code_too_many_attempts'
@@ -208,6 +301,9 @@ export class AuthrimError extends Error {
     error: string;
     error_description?: string;
     error_uri?: string;
+    error_details?: Phase1ErrorDetails;
+    status?: StepUpStatusObject;
+    input_state?: StepUpInputState;
   }): AuthrimError {
     const oauthCodes = [
       'invalid_request',
@@ -223,13 +319,19 @@ export class AuthrimError extends Error {
 
     type OAuthErrorCode = (typeof oauthCodes)[number];
 
-    const code: AuthrimErrorCode = oauthCodes.includes(error.error as OAuthErrorCode)
-      ? (error.error as OAuthErrorCode)
-      : 'invalid_request';
+    const code: AuthrimErrorCode =
+      oauthCodes.includes(error.error as OAuthErrorCode) || isAuthrimErrorCode(error.error)
+        ? (error.error as AuthrimErrorCode)
+        : 'invalid_request';
 
     return new AuthrimError(code, error.error_description ?? error.error, {
       errorUri: error.error_uri,
-      details: { originalError: error.error },
+      details: {
+        originalError: error.error,
+        ...(error.error_details ? { errorDetails: error.error_details } : {}),
+        ...(error.status ? { status: error.status } : {}),
+        ...(error.input_state ? { inputState: error.input_state } : {}),
+      },
     });
   }
 
@@ -551,6 +653,103 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
     userAction: 'none',
     severity: 'warning',
   },
+  invalid_cursor: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'error',
+  },
+  unknown_audit_field: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'error',
+  },
+  revoke_disabled: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  introspection_disabled: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  unauthorized_introspection_caller: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  step_up_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  preferred_method_unavailable: {
+    transient: false,
+    retryable: true,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  invalid_step_up_input: {
+    transient: false,
+    retryable: true,
+    maxRetries: 5,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  step_up_attempts_exhausted: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'error',
+  },
+  resend_limit_exceeded: {
+    transient: false,
+    retryable: false,
+    userAction: 'none',
+    severity: 'warning',
+  },
+  user_canceled: {
+    transient: false,
+    retryable: true,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  idempotency_conflict: {
+    transient: false,
+    retryable: false,
+    userAction: 'contact_support',
+    severity: 'error',
+  },
+  legacy_app_suite_not_supported: {
+    transient: false,
+    retryable: false,
+    userAction: 'update_client',
+    severity: 'fatal',
+  },
+  legacy_native_sso_discovery_unsupported: {
+    transient: false,
+    retryable: false,
+    userAction: 'update_client',
+    severity: 'fatal',
+  },
+  legacy_endpoint_not_supported: {
+    transient: false,
+    retryable: false,
+    userAction: 'update_client',
+    severity: 'fatal',
+  },
+  legacy_passkey_error_unsupported: {
+    transient: false,
+    retryable: false,
+    userAction: 'update_client',
+    severity: 'fatal',
+  },
 
   // Silent auth errors
   login_required: {
@@ -619,30 +818,10 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
   },
 
   // Direct Auth errors
-  passkey_not_found: {
-    transient: false,
-    retryable: false,
-    userAction: 'reauthenticate',
-    severity: 'warning',
-  },
-  passkey_verification_failed: {
-    transient: false,
-    retryable: true,
-    retryAfterMs: 1000,
-    maxRetries: 3,
-    userAction: 'retry',
-    severity: 'error',
-  },
   passkey_not_supported: {
     transient: false,
     retryable: false,
     userAction: 'none',
-    severity: 'warning',
-  },
-  passkey_cancelled: {
-    transient: false,
-    retryable: false,
-    userAction: 'reauthenticate',
     severity: 'warning',
   },
   passkey_invalid_credential: {
@@ -650,6 +829,40 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
     retryable: false,
     userAction: 'reauthenticate',
     severity: 'error',
+  },
+  passkey_user_canceled: {
+    transient: false,
+    retryable: true,
+    retryAfterMs: 0,
+    maxRetries: 1,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  passkey_timeout: {
+    transient: false,
+    retryable: true,
+    retryAfterMs: 1000,
+    maxRetries: 1,
+    userAction: 'retry',
+    severity: 'warning',
+  },
+  passkey_not_allowed: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  passkey_uv_required: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
+  },
+  passkey_no_credential: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'warning',
   },
   email_code_invalid: {
     transient: false,
@@ -916,6 +1129,13 @@ export function getErrorMeta(code: AuthrimErrorCode): AuthrimErrorMeta {
 }
 
 /**
+ * Check whether a raw error string is one of Authrim's machine-readable codes.
+ */
+export function isAuthrimErrorCode(code: string): code is AuthrimErrorCode {
+  return Object.prototype.hasOwnProperty.call(ERROR_META_MAP, code);
+}
+
+/**
  * Error classification result
  */
 export interface ErrorClassification {
@@ -971,6 +1191,8 @@ function mapUserActionToRemediation(userAction: AuthrimErrorUserAction): Authrim
       return 'retry';
     case 'reauthenticate':
       return 'reauthenticate';
+    case 'update_client':
+      return 'update_client';
     case 'contact_support':
       return 'contact_support';
     case 'none':

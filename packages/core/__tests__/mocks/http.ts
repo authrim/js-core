@@ -11,6 +11,7 @@ export interface MockResponse<T = unknown> {
   ok: boolean;
   status: number;
   statusText?: string;
+  headers?: Record<string, string>;
   data: T;
 }
 
@@ -51,6 +52,7 @@ export function createMockHttp(): HttpClient & {
         ok: response.ok,
         status: response.status,
         statusText: response.statusText ?? (response.ok ? 'OK' : 'Error'),
+        headers: response.headers ?? {},
         data: response.data as T,
       };
     },

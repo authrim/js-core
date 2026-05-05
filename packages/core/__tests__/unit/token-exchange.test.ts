@@ -21,6 +21,17 @@ function createMockTokenExchangeResponse(
     token_type: string;
     scope: string;
     issued_token_type: string;
+    installation_id: string;
+    client_id: string;
+    app_display_name: string;
+    platform: string;
+    display_name: string;
+    fallback_display_name: string;
+    last_seen_at: string;
+    last_seen_at_unix: number;
+    refresh_token_expires_in: number;
+    refresh_token_expires_at: string;
+    refresh_token_expires_at_unix: number;
   }> = {}
 ) {
   return {
@@ -31,6 +42,17 @@ function createMockTokenExchangeResponse(
     token_type: overrides.token_type ?? 'Bearer',
     scope: overrides.scope ?? 'openid profile',
     issued_token_type: overrides.issued_token_type ?? TOKEN_TYPE_URIS.access_token,
+    installation_id: overrides.installation_id,
+    client_id: overrides.client_id,
+    app_display_name: overrides.app_display_name,
+    platform: overrides.platform,
+    display_name: overrides.display_name,
+    fallback_display_name: overrides.fallback_display_name,
+    last_seen_at: overrides.last_seen_at,
+    last_seen_at_unix: overrides.last_seen_at_unix,
+    refresh_token_expires_in: overrides.refresh_token_expires_in,
+    refresh_token_expires_at: overrides.refresh_token_expires_at,
+    refresh_token_expires_at_unix: overrides.refresh_token_expires_at_unix,
   };
 }
 
@@ -107,6 +129,25 @@ describe('Token Exchange (RFC 8693)', () => {
       expect(requestBody.get('scope')).toBe('read write');
     });
 
+    it('should exchange token with resource indicators', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenExchangeResponse(),
+      }));
+
+      await tokenManager.exchangeToken({
+        subjectToken: 'original-access-token',
+        resource: ['https://api.example.com/orders', 'https://api.example.com/profile'],
+      });
+
+      const requestBody = new URLSearchParams(http.calls[0].options?.body as string);
+      expect(requestBody.getAll('resource')).toEqual([
+        'https://api.example.com/orders',
+        'https://api.example.com/profile',
+      ]);
+    });
+
     it('should exchange token with requested_token_type', async () => {
       http.setHandler(() => ({
         ok: true,
@@ -150,6 +191,77 @@ describe('Token Exchange (RFC 8693)', () => {
       expect(requestBody.get('subject_token')).toBe('user-access-token');
       expect(requestBody.get('actor_token')).toBe('service-access-token');
       expect(requestBody.get('actor_token_type')).toBe(TOKEN_TYPE_URIS.access_token);
+    });
+  });
+
+  describe('Native SSO Token Exchange', () => {
+    it('should build a native public client token exchange request with channel=native and DPoP', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenExchangeResponse({
+          token_type: 'DPoP',
+          refresh_token: 'native-refresh-token',
+          refresh_token_expires_in: 2592000,
+          refresh_token_expires_at: '2026-06-03T12:34:56Z',
+          refresh_token_expires_at_unix: 1780480496,
+          installation_id: 'ins_123',
+          client_id: clientId,
+          app_display_name: 'Authrim Wallet',
+          platform: 'ios',
+          display_name: 'Yuta iPhone',
+          fallback_display_name: 'iPhone 15 Pro',
+          last_seen_at: '2026-05-04T12:34:56Z',
+          last_seen_at_unix: 1777869296,
+        }),
+      }));
+
+      const result = await tokenManager.exchangeNativeSSOToken({
+        idToken: 'subject-id-token',
+        deviceSecret: 'raw-device-secret',
+        dpopProof: 'dpop-proof-jwt',
+        scope: 'openid profile',
+        resource: 'https://api.example.com',
+        audience: 'https://api.example.com',
+      });
+
+      const requestBody = new URLSearchParams(http.calls[0].options?.body as string);
+      expect(requestBody.get('subject_token')).toBe('subject-id-token');
+      expect(requestBody.get('subject_token_type')).toBe(TOKEN_TYPE_URIS.id_token);
+      expect(requestBody.get('actor_token')).toBe('raw-device-secret');
+      expect(requestBody.get('actor_token_type')).toBe(TOKEN_TYPE_URIS.device_secret);
+      expect(requestBody.get('channel')).toBe('native');
+      expect(requestBody.get('resource')).toBe('https://api.example.com');
+      expect(requestBody.get('audience')).toBe('https://api.example.com');
+      expect(http.calls[0].options?.headers?.DPoP).toBe('dpop-proof-jwt');
+      expect(result.tokens.tokenType).toBe('DPoP');
+      expect(result.tokens.refreshTokenExpiresIn).toBe(2592000);
+      expect(result.tokens.refreshTokenExpiresAtIso).toBe('2026-06-03T12:34:56Z');
+      expect(result.tokens.refreshTokenExpiresAt).toBe(1780480496);
+      expect(result.nativeSSO).toEqual({
+        installationId: 'ins_123',
+        clientId,
+        appDisplayName: 'Authrim Wallet',
+        platform: 'ios',
+        displayName: 'Yuta iPhone',
+        fallbackDisplayName: 'iPhone 15 Pro',
+        lastSeenAt: '2026-05-04T12:34:56Z',
+        lastSeenAtUnix: 1777869296,
+      });
+    });
+
+    it('should require a DPoP proof for Native SSO exchange', async () => {
+      await expect(
+        tokenManager.exchangeNativeSSOToken({
+          idToken: 'subject-id-token',
+          deviceSecret: 'raw-device-secret',
+          dpopProof: '',
+        })
+      ).rejects.toMatchObject({
+        code: 'invalid_request',
+      });
+
+      expect(http.calls).toHaveLength(0);
     });
   });
 
@@ -206,6 +318,25 @@ describe('Token Exchange (RFC 8693)', () => {
       expect(requestBody.get('subject_token_type')).toBe(
         'urn:ietf:params:oauth:token-type:id_token'
       );
+    });
+
+    it('should map device_secret to the Native SSO token type URI', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenExchangeResponse(),
+      }));
+
+      await tokenManager.exchangeToken({
+        subjectToken: 'stored-device-secret',
+        subjectTokenType: 'device_secret',
+        actorToken: 'current-device-secret',
+        actorTokenType: 'device_secret',
+      });
+
+      const requestBody = new URLSearchParams(http.calls[0].options?.body as string);
+      expect(requestBody.get('subject_token_type')).toBe(TOKEN_TYPE_URIS.device_secret);
+      expect(requestBody.get('actor_token_type')).toBe(TOKEN_TYPE_URIS.device_secret);
     });
   });
 
@@ -343,6 +474,24 @@ describe('Token Exchange (RFC 8693)', () => {
       // Should default to 1 hour (3600 seconds)
       expect(result.tokens.expiresAt).toBeGreaterThanOrEqual(now + 3600);
       expect(result.tokens.expiresAt).toBeLessThan(now + 3600 + 5);
+    });
+
+    it('should preserve DPoP token type and refresh token expiry metadata', async () => {
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenExchangeResponse({
+          token_type: 'DPoP',
+          refresh_token: 'rotated-refresh-token',
+          refresh_token_expires_at_unix: 1810000000,
+        }),
+      }));
+
+      const result = await tokenManager.exchangeToken({ subjectToken: 'token' });
+
+      expect(result.tokens.tokenType).toBe('DPoP');
+      expect(result.tokens.refreshToken).toBe('rotated-refresh-token');
+      expect(result.tokens.refreshTokenExpiresAt).toBe(1810000000);
     });
   });
 });

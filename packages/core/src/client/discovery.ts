@@ -9,6 +9,14 @@ import type { HttpClient } from '../providers/http.js';
 import type { OIDCDiscoveryDocument } from '../types/oidc.js';
 import { AuthrimError } from '../types/errors.js';
 
+const LEGACY_NATIVE_SSO_DISCOVERY_FIELDS = [
+  'native_sso_token_exchange_supported',
+  'native_sso_device_secret_supported',
+] as const;
+
+const LEGACY_NATIVE_SSO_DISCOVERY_ERROR_URI =
+  'https://docs.authrim.com/errors/error-codes#legacy-native-sso-discovery-unsupported';
+
 /**
  * Cached discovery document with timestamp
  */
@@ -103,6 +111,26 @@ export class DiscoveryClient {
           details: {
             expected: normalizedIssuer,
             actual: docIssuer,
+          },
+        }
+      );
+    }
+
+    const rawDoc = doc as OIDCDiscoveryDocument & Record<string, unknown>;
+    const hasCanonicalNativeSSO = typeof rawDoc.native_sso_supported === 'boolean';
+    const hasLegacyNativeSSO = LEGACY_NATIVE_SSO_DISCOVERY_FIELDS.some(
+      (field) => rawDoc[field] !== undefined
+    );
+    if (!hasCanonicalNativeSSO && hasLegacyNativeSSO) {
+      throw new AuthrimError(
+        'legacy_native_sso_discovery_unsupported',
+        'Legacy Native SSO discovery fields are not supported; use native_sso_supported.',
+        {
+          errorUri: LEGACY_NATIVE_SSO_DISCOVERY_ERROR_URI,
+          details: {
+            legacyFields: LEGACY_NATIVE_SSO_DISCOVERY_FIELDS.filter(
+              (field) => rawDoc[field] !== undefined
+            ),
           },
         }
       );

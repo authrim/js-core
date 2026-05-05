@@ -95,6 +95,11 @@ export type SocialProvider = 'google' | 'github' | 'apple' | 'microsoft' | 'face
 export type MfaMethod = 'totp' | 'sms' | 'email' | 'passkey';
 
 /**
+ * Direct Auth execution channel
+ */
+export type DirectAuthChannel = 'browser' | 'native' | 'server';
+
+/**
  * User information
  */
 export interface User {
@@ -152,6 +157,8 @@ export interface AuthResult {
   session?: Session;
   /** User information (on success) */
   user?: User;
+  /** Canonical OAuth/OIDC token response (on token-oriented Direct Auth success) */
+  tokens?: DirectAuthTokenResponse;
   /** Error information (on failure) */
   error?: DirectAuthError;
   /** Additional action required */
@@ -319,9 +326,13 @@ export interface SocialLoginOptions {
 /**
  * Logout options
  */
+export type DirectAuthLogoutScope = 'local' | 'group' | 'global';
+
 export interface DirectAuthLogoutOptions {
   /** Revoke refresh tokens */
   revokeTokens?: boolean;
+  /** Authrim logout propagation scope. Defaults server-side to group. */
+  logoutScope?: DirectAuthLogoutScope;
   /** Post-logout redirect URI */
   redirectUri?: string;
 }
@@ -337,6 +348,8 @@ export interface PasskeyLoginStartRequest {
   client_id: string;
   code_challenge: string;
   code_challenge_method: 'S256';
+  channel: DirectAuthChannel;
+  scope?: string;
 }
 
 /**
@@ -356,14 +369,17 @@ export interface PasskeyLoginFinishRequest {
   challenge_id: string;
   credential: AuthenticationResponseJSON;
   code_verifier: string;
+  channel: DirectAuthChannel;
 }
 
 /**
  * Passkey login finish response
  */
 export interface PasskeyLoginFinishResponse {
-  /** Authorization code (60s TTL, single-use) */
-  auth_code: string;
+  /** Direct Auth artifact (60s TTL, single-use) */
+  direct_auth_artifact: string;
+  /** Artifact expiration in seconds */
+  expires_in: number;
 }
 
 /**
@@ -375,6 +391,8 @@ export interface PasskeySignupStartRequest {
   display_name?: string;
   code_challenge: string;
   code_challenge_method: 'S256';
+  channel: DirectAuthChannel;
+  scope?: string;
   authenticator_type?: 'platform' | 'cross-platform' | 'any';
   resident_key?: 'required' | 'preferred' | 'discouraged';
   user_verification?: 'required' | 'preferred' | 'discouraged';
@@ -397,14 +415,17 @@ export interface PasskeySignupFinishRequest {
   challenge_id: string;
   credential: RegistrationResponseJSON;
   code_verifier: string;
+  channel: DirectAuthChannel;
 }
 
 /**
  * Passkey signup finish response
  */
 export interface PasskeySignupFinishResponse {
-  /** Authorization code (60s TTL, single-use) */
-  auth_code: string;
+  /** Direct Auth artifact (60s TTL, single-use) */
+  direct_auth_artifact: string;
+  /** Artifact expiration in seconds */
+  expires_in: number;
   /** Whether the user was newly created */
   is_new_user: boolean;
 }
@@ -417,6 +438,8 @@ export interface EmailCodeSendRequest {
   email: string;
   code_challenge: string;
   code_challenge_method: 'S256';
+  channel: DirectAuthChannel;
+  scope?: string;
   locale?: string;
 }
 
@@ -439,14 +462,17 @@ export interface EmailCodeVerifyRequest {
   attempt_id: string;
   code: string;
   code_verifier: string;
+  channel: DirectAuthChannel;
 }
 
 /**
  * Email code verify response
  */
 export interface EmailCodeVerifyResponse {
-  /** Authorization code (60s TTL, single-use) */
-  auth_code: string;
+  /** Direct Auth artifact (60s TTL, single-use) */
+  direct_auth_artifact: string;
+  /** Artifact expiration in seconds */
+  expires_in: number;
   /** Whether the user was newly created */
   is_new_user: boolean;
 }
@@ -455,14 +481,15 @@ export interface EmailCodeVerifyResponse {
  * Token exchange request (Direct Auth)
  */
 export interface DirectAuthTokenRequest {
-  grant_type: 'authorization_code';
-  code: string;
+  grant_type: 'urn:authrim:params:oauth:grant-type:direct-auth-finish';
+  direct_auth_artifact: string;
   client_id: string;
   code_verifier: string;
+  channel: DirectAuthChannel;
   /** External IdP provider ID (required for social/external flows) */
   provider_id?: string;
-  /** Whether to request refresh token (for SPA opt-in) */
-  request_refresh_token?: boolean;
+  /** Target resource indicator */
+  resource?: string | string[];
 }
 
 /**
@@ -471,24 +498,24 @@ export interface DirectAuthTokenRequest {
  * Unified structure for Web/Mobile, differentiated by flags.
  */
 export interface DirectAuthTokenResponse {
-  /** Token type (always 'Bearer') */
-  token_type: 'Bearer';
+  /** Token type */
+  token_type: 'Bearer' | 'DPoP' | string;
   /** Access token */
   access_token: string;
   /** Token expiration (seconds) */
   expires_in: number;
-  /** Refresh token (Mobile, or SPA with opt-in) */
+  /** Refresh token, when policy allows issuance */
   refresh_token?: string;
+  /** Refresh token expiration (seconds) */
+  refresh_token_expires_in?: number;
+  /** Refresh token expiration as Unix timestamp */
+  refresh_token_expires_at_unix?: number;
   /** ID token */
   id_token?: string;
   /** Granted scopes */
   scope?: string;
-  /** Whether session is established via Cookie (Web) */
-  session_established: boolean;
-  /** Session information */
-  session?: Session;
-  /** User information */
-  user?: User;
+  /** Native SSO device secret, when issued */
+  device_secret?: string;
 }
 
 // =============================================================================
@@ -611,6 +638,8 @@ export interface DirectAuthClientConfig {
   issuer: string;
   /** OAuth client ID */
   clientId: string;
+  /** Direct Auth execution channel */
+  channel?: DirectAuthChannel;
   /** Default redirect URI */
   redirectUri?: string;
 }

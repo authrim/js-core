@@ -44,13 +44,18 @@ export interface JWK {
 }
 
 /**
+ * Phase 1 DPoP signing algorithms.
+ */
+export type DPoPAlgorithm = 'ES256' | 'PS256' | 'EdDSA';
+
+/**
  * DPoP key pair interface
  *
  * Represents an asymmetric key pair used for DPoP proofs.
  */
 export interface DPoPKeyPair {
-  /** Algorithm identifier (e.g., 'ES256', 'RS256') */
-  algorithm: string;
+  /** Algorithm identifier */
+  algorithm: DPoPAlgorithm;
   /** JWK thumbprint of the public key (base64url encoded) */
   thumbprint: string;
   /** Public key in JWK format */
@@ -71,7 +76,7 @@ export interface DPoPProofHeader {
   /** Type (always 'dpop+jwt') */
   typ: 'dpop+jwt';
   /** Algorithm */
-  alg: string;
+  alg: DPoPAlgorithm | string;
   /** Public key in JWK format */
   jwk: JWK;
 }
@@ -109,7 +114,7 @@ export interface DPoPProofOptions {
  */
 export interface DPoPManagerConfig {
   /** Preferred algorithm (default: 'ES256') */
-  algorithm?: string;
+  algorithm?: DPoPAlgorithm;
 }
 
 /**
@@ -125,7 +130,7 @@ export interface DPoPCryptoProvider {
    * @param algorithm - Preferred algorithm (default: 'ES256')
    * @returns Generated key pair
    */
-  generateDPoPKeyPair?(algorithm?: string): Promise<DPoPKeyPair>;
+  generateDPoPKeyPair?(algorithm?: DPoPAlgorithm): Promise<DPoPKeyPair>;
 
   /**
    * Get the current DPoP key pair

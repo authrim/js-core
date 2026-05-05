@@ -32,6 +32,10 @@ export interface PARRequest {
   loginHint?: string;
   /** Requested Authentication Context Class Reference values */
   acrValues?: string;
+  /** Resource indicator for the access token */
+  resource?: string | string[];
+  /** Target audience for the access token */
+  audience?: string;
   /** Additional custom parameters */
   extraParams?: Record<string, string>;
 }

@@ -5,6 +5,7 @@
 export {
   AuthrimError,
   getErrorMeta,
+  isAuthrimErrorCode,
   classifyError,
   isRetryableError,
   type AuthrimErrorCode,
@@ -13,12 +14,24 @@ export {
   type AuthrimErrorUserAction,
   type AuthrimErrorRemediation,
   type ErrorClassification,
+  type Phase1ErrorDetails,
+  type Phase1ErrorDetailSeverity,
+  type Phase1ErrorDetailUserAction,
+  type StepUpActionStatus,
+  type StepUpErrorDetailCode,
+  type StepUpErrorResponseBody,
+  type StepUpInputState,
+  type StepUpPreferredMethod,
+  type StepUpStatusObject,
 } from './errors.js';
 export type { OIDCDiscoveryDocument, IdTokenClaims, UserInfo } from './oidc.js';
 export type {
   TokenSet,
   TokenEndpointResponse,
   TokenExchangeRequest,
+  NativeSSOTokenExchangeRequest,
+  TokenExchangeResponse,
+  TokenExchangeResult,
 } from './token.js';
 export type {
   PARRequest,
@@ -45,9 +58,21 @@ export type {
   DeviceFlowAccessDeniedResult,
   DeviceFlowStartOptions,
 } from './device-flow.js';
+export {
+  DEFAULT_STEP_UP_POLICY,
+  type StepUpAcceptableMethods,
+  type StepUpActionResponse,
+  type StepUpCompleteRequest,
+  type StepUpFailureBody,
+  type StepUpNextAction,
+  type StepUpRequirement,
+  type StepUpResendResponse,
+  type StepUpStartRequest,
+} from './step-up.js';
 export type {
   JWK,
   DPoPKeyPair,
+  DPoPAlgorithm,
   DPoPProofHeader,
   DPoPProofClaims,
   DPoPProofOptions,

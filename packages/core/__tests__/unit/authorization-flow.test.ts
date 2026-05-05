@@ -192,6 +192,200 @@ describe('Authorization Flow', () => {
     });
   });
 
+  describe('DPoP token request binding', () => {
+    it('sends resource and audience on authorization code token requests', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({ nonce });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenResponse({ id_token: idToken }),
+      }));
+
+      await authCodeFlow.exchangeCode(discovery, {
+        code: 'auth-code',
+        state: 'test-state',
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        nonce,
+        scope: 'openid profile',
+        resource: ['https://api.example.com/orders', 'https://api.example.com/profile'],
+        audience: 'https://api.example.com',
+      });
+
+      const requestBody = new URLSearchParams(http.calls[0]?.options?.body as string);
+      expect(requestBody.getAll('resource')).toEqual([
+        'https://api.example.com/orders',
+        'https://api.example.com/profile',
+      ]);
+      expect(requestBody.get('audience')).toBe('https://api.example.com');
+    });
+
+    it('attaches DPoP proof to authorization code token requests', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({ nonce });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenResponse({ id_token: idToken, token_type: 'DPoP' }),
+      }));
+
+      const tokens = await authCodeFlow.exchangeCode(discovery, {
+        code: 'auth-code',
+        state: 'test-state',
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        nonce,
+        scope: 'openid profile',
+        dpopProof: 'proof.jwt',
+      });
+
+      expect(http.calls[0]?.options?.headers).toMatchObject({ DPoP: 'proof.jwt' });
+      expect(tokens.tokenType).toBe('DPoP');
+    });
+
+    it('retries a token request once when the server returns a DPoP nonce challenge', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({ nonce });
+      const proofFactory = vi.fn(async (serverNonce: string) => `proof-with-${serverNonce}`);
+      let tokenCalls = 0;
+
+      http.setHandler(() => {
+        tokenCalls += 1;
+        if (tokenCalls === 1) {
+          return {
+            ok: false,
+            status: 400,
+            headers: { 'DPoP-Nonce': 'server-nonce-1' },
+            data: {
+              error: 'use_dpop_nonce',
+              error_description: 'DPoP nonce required',
+            },
+          };
+        }
+
+        return {
+          ok: true,
+          status: 200,
+          data: createMockTokenResponse({ id_token: idToken, token_type: 'DPoP' }),
+        };
+      });
+
+      const tokens = await authCodeFlow.exchangeCode(discovery, {
+        code: 'auth-code',
+        state: 'test-state',
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        nonce,
+        scope: 'openid profile',
+        dpopProof: 'initial-proof.jwt',
+        dpopProofFactory: proofFactory,
+      });
+
+      expect(tokens.tokenType).toBe('DPoP');
+      expect(proofFactory).toHaveBeenCalledWith('server-nonce-1');
+      expect(http.calls).toHaveLength(2);
+      expect(http.calls[0]?.options?.headers).toMatchObject({ DPoP: 'initial-proof.jwt' });
+      expect(http.calls[1]?.options?.headers).toMatchObject({ DPoP: 'proof-with-server-nonce-1' });
+    });
+
+    it('does not loop when a DPoP nonce retry also fails', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const proofFactory = vi.fn(async (serverNonce: string) => `proof-with-${serverNonce}`);
+
+      http.setHandler(() => ({
+        ok: false,
+        status: 400,
+        headers: { 'dpop-nonce': 'server-nonce-1' },
+        data: {
+          error: 'use_dpop_nonce',
+          error_description: 'DPoP nonce required',
+        },
+      }));
+
+      await expect(
+        authCodeFlow.exchangeCode(discovery, {
+          code: 'auth-code',
+          state: 'test-state',
+          redirectUri,
+          codeVerifier: 'test-verifier',
+          nonce: 'valid-nonce',
+          scope: 'openid profile',
+          dpopProof: 'initial-proof.jwt',
+          dpopProofFactory: proofFactory,
+        })
+      ).rejects.toMatchObject({ code: 'token_error' });
+
+      expect(proofFactory).toHaveBeenCalledTimes(1);
+      expect(http.calls).toHaveLength(2);
+    });
+
+    it('fails without retry when use_dpop_nonce omits the DPoP-Nonce header', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const proofFactory = vi.fn(async (serverNonce: string) => `proof-with-${serverNonce}`);
+
+      http.setHandler(() => ({
+        ok: false,
+        status: 400,
+        data: {
+          error: 'use_dpop_nonce',
+          error_description: 'DPoP nonce required',
+        },
+      }));
+
+      await expect(
+        authCodeFlow.exchangeCode(discovery, {
+          code: 'auth-code',
+          state: 'test-state',
+          redirectUri,
+          codeVerifier: 'test-verifier',
+          nonce: 'valid-nonce',
+          scope: 'openid profile',
+          dpopProof: 'initial-proof.jwt',
+          dpopProofFactory: proofFactory,
+        })
+      ).rejects.toMatchObject({ code: 'token_error' });
+
+      expect(proofFactory).not.toHaveBeenCalled();
+      expect(http.calls).toHaveLength(1);
+    });
+
+    it('exposes refresh token expiry metadata from token responses', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({ nonce });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: {
+          ...createMockTokenResponse({ id_token: idToken }),
+          refresh_token_expires_in: 604800,
+          refresh_token_expires_at: '2026-06-01T00:00:00.000Z',
+          refresh_token_expires_at_unix: 1780272000,
+        },
+      }));
+
+      const tokens = await authCodeFlow.exchangeCode(discovery, {
+        code: 'auth-code',
+        state: 'test-state',
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        nonce,
+        scope: 'openid profile',
+      });
+
+      expect(tokens.refreshTokenExpiresIn).toBe(604800);
+      expect(tokens.refreshTokenExpiresAtIso).toBe('2026-06-01T00:00:00.000Z');
+      expect(tokens.refreshTokenExpiresAt).toBe(1780272000);
+    });
+  });
+
   describe('Security Parameter Protection', () => {
     it('should not allow extraParams to override security parameters', async () => {
       const discovery = createMockDiscoveryDocument(issuer);
@@ -212,6 +406,8 @@ describe('Authorization Flow', () => {
       // Try to override security parameters via extraParams
       const result = authCodeFlow.buildAuthorizationUrl(discovery, authState, pkce, {
         redirectUri,
+        resource: ['https://api.example.com/orders', 'https://api.example.com/profile'],
+        audience: 'https://api.example.com',
         extraParams: {
           state: 'attacker-state',
           nonce: 'attacker-nonce',
@@ -221,6 +417,8 @@ describe('Authorization Flow', () => {
           client_id: 'attacker-client',
           redirect_uri: 'https://attacker.com/callback',
           scope: 'admin',
+          resource: 'https://attacker.example.com',
+          audience: 'https://attacker.example.com',
         },
       });
 
@@ -234,6 +432,11 @@ describe('Authorization Flow', () => {
       expect(url.searchParams.get('client_id')).toBe(clientId);
       expect(url.searchParams.get('redirect_uri')).toBe(redirectUri);
       expect(url.searchParams.get('scope')).toBe('openid profile');
+      expect(url.searchParams.getAll('resource')).toEqual([
+        'https://api.example.com/orders',
+        'https://api.example.com/profile',
+      ]);
+      expect(url.searchParams.get('audience')).toBe('https://api.example.com');
     });
 
     it('should allow non-security extraParams', async () => {

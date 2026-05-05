@@ -8,7 +8,11 @@ import { describe, it, expect } from 'vitest';
 import {
   AuthrimError,
   getErrorMeta,
+  isAuthrimErrorCode,
   type AuthrimErrorCode,
+  type StepUpErrorResponseBody,
+  type StepUpInputState,
+  type StepUpStatusObject,
   type User,
   type Session,
   type AuthResult,
@@ -153,7 +157,7 @@ describe('Direct Auth Types', () => {
 
     it('should export DirectAuthError type', () => {
       const error: DirectAuthError = {
-        error: 'passkey_not_found',
+        error: 'passkey_no_credential',
         error_description: 'No passkey registered for this account',
         code: 'AR003001',
         meta: {
@@ -163,7 +167,7 @@ describe('Direct Auth Types', () => {
         },
       };
 
-      expect(error.error).toBe('passkey_not_found');
+      expect(error.error).toBe('passkey_no_credential');
       expect(error.code).toBe('AR003001');
     });
 
@@ -266,9 +270,11 @@ describe('Direct Auth Types', () => {
     it('should export DirectAuthLogoutOptions', () => {
       const options: DirectAuthLogoutOptions = {
         revokeTokens: true,
+        logoutScope: 'global',
         redirectUri: 'https://app.example.com',
       };
       expect(options.revokeTokens).toBe(true);
+      expect(options.logoutScope).toBe('global');
     });
   });
 
@@ -278,6 +284,7 @@ describe('Direct Auth Types', () => {
         client_id: 'client-123',
         code_challenge: 'challenge-value',
         code_challenge_method: 'S256',
+        channel: 'browser',
       };
       expect(request.code_challenge_method).toBe('S256');
     });
@@ -312,15 +319,17 @@ describe('Direct Auth Types', () => {
           clientExtensionResults: {},
         },
         code_verifier: 'verifier-value',
+        channel: 'browser',
       };
       expect(request.challenge_id).toBe('challenge-123');
     });
 
     it('should export PasskeyLoginFinishResponse', () => {
       const response: PasskeyLoginFinishResponse = {
-        auth_code: 'auth-code-123',
+        direct_auth_artifact: 'artifact-123',
+        expires_in: 60,
       };
-      expect(response.auth_code).toBe('auth-code-123');
+      expect(response.direct_auth_artifact).toBe('artifact-123');
     });
 
     it('should export PasskeySignupStartRequest', () => {
@@ -330,6 +339,7 @@ describe('Direct Auth Types', () => {
         display_name: 'Test User',
         code_challenge: 'challenge-value',
         code_challenge_method: 'S256',
+        channel: 'browser',
         authenticator_type: 'platform',
         resident_key: 'required',
         user_verification: 'required',
@@ -365,13 +375,15 @@ describe('Direct Auth Types', () => {
           clientExtensionResults: {},
         },
         code_verifier: 'verifier-value',
+        channel: 'browser',
       };
       expect(request.credential.response.attestationObject).toBe('base64url');
     });
 
     it('should export PasskeySignupFinishResponse', () => {
       const response: PasskeySignupFinishResponse = {
-        auth_code: 'auth-code-123',
+        direct_auth_artifact: 'artifact-123',
+        expires_in: 60,
         is_new_user: true,
       };
       expect(response.is_new_user).toBe(true);
@@ -383,6 +395,7 @@ describe('Direct Auth Types', () => {
         email: 'test@example.com',
         code_challenge: 'challenge-value',
         code_challenge_method: 'S256',
+        channel: 'browser',
         locale: 'ja',
       };
       expect(request.email).toBe('test@example.com');
@@ -402,13 +415,15 @@ describe('Direct Auth Types', () => {
         attempt_id: 'attempt-123',
         code: '123456',
         code_verifier: 'verifier-value',
+        channel: 'browser',
       };
       expect(request.code).toBe('123456');
     });
 
     it('should export EmailCodeVerifyResponse', () => {
       const response: EmailCodeVerifyResponse = {
-        auth_code: 'auth-code-123',
+        direct_auth_artifact: 'artifact-123',
+        expires_in: 60,
         is_new_user: false,
       };
       expect(response.is_new_user).toBe(false);
@@ -416,16 +431,16 @@ describe('Direct Auth Types', () => {
 
     it('should export DirectAuthTokenRequest', () => {
       const request: DirectAuthTokenRequest = {
-        grant_type: 'authorization_code',
-        code: 'auth-code-123',
+        grant_type: 'urn:authrim:params:oauth:grant-type:direct-auth-finish',
+        direct_auth_artifact: 'artifact-123',
         client_id: 'client-123',
         code_verifier: 'verifier-value',
-        request_refresh_token: true,
+        channel: 'browser',
       };
-      expect(request.grant_type).toBe('authorization_code');
+      expect(request.grant_type).toBe('urn:authrim:params:oauth:grant-type:direct-auth-finish');
     });
 
-    it('should export DirectAuthTokenResponse with session_established', () => {
+    it('should export DirectAuthTokenResponse as a canonical token response', () => {
       const response: DirectAuthTokenResponse = {
         token_type: 'Bearer',
         access_token: 'access-token-123',
@@ -433,19 +448,8 @@ describe('Direct Auth Types', () => {
         refresh_token: 'refresh-token-123',
         id_token: 'id-token-123',
         scope: 'openid profile email',
-        session_established: true,
-        session: {
-          id: 'session-123',
-          userId: 'user-123',
-          createdAt: '2025-01-20T00:00:00Z',
-          expiresAt: '2025-01-21T00:00:00Z',
-        },
-        user: {
-          id: 'user-123',
-          email: 'test@example.com',
-        },
       };
-      expect(response.session_established).toBe(true);
+      expect(response.access_token).toBe('access-token-123');
       expect(response.token_type).toBe('Bearer');
     });
   });
@@ -701,16 +705,10 @@ describe('Direct Auth Types', () => {
 
 describe('Direct Auth Error Codes', () => {
   describe('Passkey Error Codes', () => {
-    it('should have passkey_not_found error', () => {
-      const error = new AuthrimError('passkey_not_found', 'No passkey registered');
-      expect(error.code).toBe('passkey_not_found');
+    it('should have passkey_no_credential error', () => {
+      const error = new AuthrimError('passkey_no_credential', 'No passkey registered');
+      expect(error.code).toBe('passkey_no_credential');
       expect(error.meta.userAction).toBe('reauthenticate');
-    });
-
-    it('should have passkey_verification_failed error', () => {
-      const error = new AuthrimError('passkey_verification_failed', 'Verification failed');
-      expect(error.code).toBe('passkey_verification_failed');
-      expect(error.meta.retryable).toBe(true);
     });
 
     it('should have passkey_not_supported error', () => {
@@ -719,9 +717,9 @@ describe('Direct Auth Error Codes', () => {
       expect(error.meta.severity).toBe('warning');
     });
 
-    it('should have passkey_cancelled error', () => {
-      const error = new AuthrimError('passkey_cancelled', 'User cancelled');
-      expect(error.code).toBe('passkey_cancelled');
+    it('should have passkey_user_canceled error', () => {
+      const error = new AuthrimError('passkey_user_canceled', 'User cancelled');
+      expect(error.code).toBe('passkey_user_canceled');
     });
 
     it('should have passkey_invalid_credential error', () => {
@@ -816,7 +814,7 @@ describe('Direct Auth Error Codes', () => {
 
   describe('Error Meta Helper', () => {
     it('should return correct meta for passkey errors', () => {
-      const meta = getErrorMeta('passkey_not_found');
+      const meta = getErrorMeta('passkey_no_credential');
       expect(meta.retryable).toBe(false);
       expect(meta.userAction).toBe('reauthenticate');
     });
@@ -831,10 +829,12 @@ describe('Direct Auth Error Codes', () => {
 
     it('should return correct meta for all Direct Auth error codes', () => {
       const directAuthCodes: AuthrimErrorCode[] = [
-        'passkey_not_found',
-        'passkey_verification_failed',
+        'passkey_no_credential',
         'passkey_not_supported',
-        'passkey_cancelled',
+        'passkey_user_canceled',
+        'passkey_timeout',
+        'passkey_not_allowed',
+        'passkey_uv_required',
         'passkey_invalid_credential',
         'email_code_invalid',
         'email_code_expired',
@@ -858,6 +858,106 @@ describe('Direct Auth Error Codes', () => {
         expect(typeof meta.transient).toBe('boolean');
         expect(['fatal', 'error', 'warning']).toContain(meta.severity);
       }
+    });
+  });
+
+  describe('Step-Up Error Types', () => {
+    it('should expose canonical Step-Up response status and input state types', () => {
+      const inputState: StepUpInputState = {
+        field: 'code',
+        attempts_remaining: 4,
+        max_attempts: 5,
+      };
+      const status: StepUpStatusObject = {
+        action_id: 'act_123',
+        status: 'pending',
+        preferred_method: {
+          method: 'email_otp',
+        },
+      };
+      const response: StepUpErrorResponseBody = {
+        error: 'invalid_step_up_input',
+        error_description: 'Invalid verification code',
+        error_details: {
+          code: 'invalid_step_up_input',
+          retryable: true,
+          severity: 'warning',
+          field: 'code',
+          input_state: inputState,
+        },
+        input_state: inputState,
+        status,
+      };
+
+      expect(response.error_details.retryable).toBe(true);
+      expect(response.error_details.field).toBe('code');
+      expect(response.input_state?.attempts_remaining).toBe(4);
+      expect(response.status?.preferred_method?.method).toBe('email_otp');
+      expect(isAuthrimErrorCode('step_up_required')).toBe(true);
+      expect(getErrorMeta('invalid_step_up_input').retryable).toBe(true);
+    });
+
+    it('should preserve Step-Up error details from OAuth-style responses', () => {
+      const error = AuthrimError.fromOAuthError({
+        error: 'invalid_step_up_input',
+        error_description: 'Invalid verification code',
+        error_details: {
+          code: 'invalid_step_up_input',
+          retryable: true,
+          severity: 'warning',
+          field: 'code',
+        },
+        status: {
+          action_id: 'act_123',
+          status: 'pending',
+        },
+        input_state: {
+          field: 'code',
+        },
+      });
+
+      expect(error.code).toBe('invalid_step_up_input');
+      expect(error.errorUri).toBeUndefined();
+      expect(error.details?.errorDetails).toEqual(
+        expect.objectContaining({
+          code: 'invalid_step_up_input',
+          field: 'code',
+        })
+      );
+      expect(error.details?.status).toEqual(
+        expect.objectContaining({
+          action_id: 'act_123',
+          status: 'pending',
+        })
+      );
+      expect(error.meta.retryable).toBe(true);
+    });
+  });
+
+  describe('Compatibility Error Codes', () => {
+    it('should preserve legacy unsupported errors from OAuth responses', () => {
+      const error = AuthrimError.fromOAuthError({
+        error: 'legacy_endpoint_not_supported',
+        error_description: 'Legacy Direct Auth token endpoint is not supported',
+        error_uri: 'https://docs.authrim.example/errors/legacy_endpoint_not_supported',
+      });
+
+      expect(error.code).toBe('legacy_endpoint_not_supported');
+      expect(error.errorUri).toBe(
+        'https://docs.authrim.example/errors/legacy_endpoint_not_supported'
+      );
+      expect(error.meta.severity).toBe('fatal');
+      expect(error.meta.userAction).toBe('update_client');
+      expect(isAuthrimErrorCode('legacy_endpoint_not_supported')).toBe(true);
+    });
+
+    it('should classify unknown OAuth errors as invalid_request fallback', () => {
+      const error = AuthrimError.fromOAuthError({
+        error: 'unknown_legacy_error',
+      });
+
+      expect(error.code).toBe('invalid_request');
+      expect(isAuthrimErrorCode('unknown_legacy_error')).toBe(false);
     });
   });
 });

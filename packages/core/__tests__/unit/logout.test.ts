@@ -96,11 +96,13 @@ describe('Logout Handler', () => {
         postLogoutRedirectUri: 'https://app.example.com',
         idTokenHint: 'custom-id-token',
         state: 'logout-state',
+        logoutScope: 'local',
       });
 
       expect(result.logoutUrl).toContain('post_logout_redirect_uri=https%3A%2F%2Fapp.example.com');
       expect(result.logoutUrl).toContain('id_token_hint=custom-id-token');
       expect(result.logoutUrl).toContain('state=logout-state');
+      expect(result.logoutUrl).toContain('logout_scope=local');
       expect(result.logoutUrl).toContain('client_id=test-client');
     });
 

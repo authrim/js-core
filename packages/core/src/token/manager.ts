@@ -14,6 +14,7 @@ import type {
   TokenExchangeRequest,
   TokenExchangeResponse,
   TokenExchangeResult,
+  NativeSSOTokenExchangeRequest,
 } from '../types/token.js';
 import { TOKEN_TYPE_URIS } from '../types/token.js';
 import type { EventEmitter } from '../events/emitter.js';
@@ -566,6 +567,12 @@ export class TokenManager {
     if (request.audience) {
       body.set('audience', request.audience);
     }
+    if (request.resource) {
+      const resources = Array.isArray(request.resource) ? request.resource : [request.resource];
+      for (const resource of resources) {
+        body.append('resource', resource);
+      }
+    }
     if (request.scope) {
       body.set('scope', request.scope);
     }
@@ -578,14 +585,22 @@ export class TokenManager {
         body.set('actor_token_type', this.mapTokenTypeToUri(request.actorTokenType));
       }
     }
+    if (request.channel) {
+      body.set('channel', request.channel);
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    if (request.dpopProof) {
+      headers.DPoP = request.dpopProof;
+    }
 
     let response;
     try {
       response = await this.http.fetch<TokenExchangeResponse>(tokenEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers,
         body: body.toString(),
       });
     } catch (error) {
@@ -635,16 +650,40 @@ export class TokenManager {
 
     const tokens: TokenSet = {
       accessToken: tokenResponse.access_token,
-      tokenType: (tokenResponse.token_type as 'Bearer') ?? 'Bearer',
+      tokenType: tokenResponse.token_type === 'DPoP' ? 'DPoP' : 'Bearer',
       expiresAt,
       refreshToken: tokenResponse.refresh_token,
+      refreshTokenExpiresAt: tokenResponse.refresh_token_expires_at_unix,
+      refreshTokenExpiresIn: tokenResponse.refresh_token_expires_in,
+      refreshTokenExpiresAtIso: tokenResponse.refresh_token_expires_at,
       idToken: tokenResponse.id_token,
       scope: tokenResponse.scope,
     };
 
+    const nativeSSO =
+      tokenResponse.installation_id ||
+      tokenResponse.client_id ||
+      tokenResponse.platform ||
+      tokenResponse.display_name ||
+      tokenResponse.fallback_display_name ||
+      tokenResponse.last_seen_at ||
+      tokenResponse.last_seen_at_unix
+        ? {
+            installationId: tokenResponse.installation_id,
+            clientId: tokenResponse.client_id,
+            appDisplayName: tokenResponse.app_display_name,
+            platform: tokenResponse.platform,
+            displayName: tokenResponse.display_name,
+            fallbackDisplayName: tokenResponse.fallback_display_name,
+            lastSeenAt: tokenResponse.last_seen_at,
+            lastSeenAtUnix: tokenResponse.last_seen_at_unix,
+          }
+        : undefined;
+
     const result: TokenExchangeResult = {
       tokens,
       issuedTokenType: tokenResponse.issued_token_type,
+      nativeSSO,
     };
 
     // Emit event with new format (no token values for security)
@@ -661,9 +700,35 @@ export class TokenManager {
   }
 
   /**
+   * Exchange an ID Token and device_secret using the Native SSO token exchange profile.
+   */
+  async exchangeNativeSSOToken(
+    request: NativeSSOTokenExchangeRequest
+  ): Promise<TokenExchangeResult> {
+    if (!request.dpopProof) {
+      throw new AuthrimError(
+        'invalid_request',
+        'Native SSO token exchange requires a DPoP proof'
+      );
+    }
+
+    return this.exchangeToken({
+      subjectToken: request.idToken,
+      subjectTokenType: 'id_token',
+      actorToken: request.deviceSecret,
+      actorTokenType: 'device_secret',
+      channel: 'native',
+      dpopProof: request.dpopProof,
+      scope: request.scope,
+      resource: request.resource,
+      audience: request.audience,
+    });
+  }
+
+  /**
    * Map short token type to URI (RFC 8693)
    */
-  private mapTokenTypeToUri(type: 'access_token' | 'refresh_token' | 'id_token'): string {
+  private mapTokenTypeToUri(type: 'access_token' | 'refresh_token' | 'id_token' | 'device_secret'): string {
     return TOKEN_TYPE_URIS[type];
   }
 

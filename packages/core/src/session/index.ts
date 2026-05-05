@@ -4,6 +4,7 @@
 
 export {
   LogoutHandler,
+  type LogoutScope,
   type LogoutOptions,
   type LogoutResult,
   type LogoutHandlerOptions,

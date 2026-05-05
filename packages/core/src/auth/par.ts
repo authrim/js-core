@@ -77,6 +77,15 @@ export class PARClient {
     if (request.acrValues) {
       body.set('acr_values', request.acrValues);
     }
+    if (request.audience) {
+      body.set('audience', request.audience);
+    }
+    if (request.resource) {
+      const resources = Array.isArray(request.resource) ? request.resource : [request.resource];
+      for (const resource of resources) {
+        body.append('resource', resource);
+      }
+    }
 
     // Extra custom parameters (with security parameter protection)
     if (request.extraParams) {
@@ -89,6 +98,8 @@ export class PARClient {
         'code_challenge',
         'code_challenge_method',
         'scope',
+        'resource',
+        'audience',
       ]);
 
       for (const [key, value] of Object.entries(request.extraParams)) {

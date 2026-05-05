@@ -17,6 +17,8 @@ import { TokenRevoker } from '../token/revocation.js';
 /**
  * Logout options
  */
+export type LogoutScope = 'local' | 'group' | 'global';
+
 export interface LogoutOptions {
   /** URI to redirect to after logout */
   postLogoutRedirectUri?: string;
@@ -24,6 +26,8 @@ export interface LogoutOptions {
   idTokenHint?: string;
   /** State parameter for post-logout redirect */
   state?: string;
+  /** Authrim logout propagation scope. Defaults server-side to group. */
+  logoutScope?: LogoutScope;
   /** Whether to revoke tokens before logout (requires revocation_endpoint) */
   revokeTokens?: boolean;
 }
@@ -161,6 +165,9 @@ export class LogoutHandler {
     }
     if (options?.state) {
       params.set('state', options.state);
+    }
+    if (options?.logoutScope) {
+      params.set('logout_scope', options.logoutScope);
     }
 
     return {

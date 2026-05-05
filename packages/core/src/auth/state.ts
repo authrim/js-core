@@ -24,6 +24,10 @@ export interface AuthState {
   redirectUri: string;
   /** Requested scope (for validation) */
   scope: string;
+  /** Requested resource indicator for the token request */
+  resource?: string | string[];
+  /** Requested audience for the token request */
+  audience?: string;
   /** Timestamp when state was created */
   createdAt: number;
   /** Timestamp when state expires */
@@ -66,6 +70,22 @@ export interface GenerateAuthStateOptions {
   codeVerifier: string;
   /** Requested scope (for validation) */
   scope: string;
+  /**
+   * Resource indicator for the token request.
+   *
+   * When omitted, Authrim resolves the access token audience from client
+   * metadata default resource. If no request target or default resource exists,
+   * the token endpoint fails with invalid_target.
+   */
+  resource?: string | string[];
+  /**
+   * Target audience for the token request.
+   *
+   * When omitted, Authrim resolves the access token audience from client
+   * metadata default resource. If no request target or default resource exists,
+   * the token endpoint fails with invalid_target.
+   */
+  audience?: string;
   /** TTL in seconds (default: 600 = 10 minutes) */
   ttlSeconds?: number;
   /** Return URL after authentication */
@@ -165,6 +185,8 @@ export class StateManager {
       codeVerifier: options.codeVerifier,
       redirectUri: options.redirectUri,
       scope: options.scope,
+      resource: options.resource,
+      audience: options.audience,
       createdAt: now,
       expiresAt: now + ttlSeconds * 1000,
       returnTo: validatedReturnTo,

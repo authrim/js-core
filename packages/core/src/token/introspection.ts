@@ -12,7 +12,7 @@ import { AuthrimError } from '../types/errors.js';
 /**
  * Token type hint for introspection
  */
-export type IntrospectionTokenTypeHint = 'access_token' | 'refresh_token';
+export type IntrospectionTokenTypeHint = 'access_token' | 'refresh_token' | 'device_secret';
 
 /**
  * Token introspection response (RFC 7662)
@@ -42,6 +42,16 @@ export interface IntrospectionResponse {
   iss?: string;
   /** JWT ID */
   jti?: string;
+  /** Native SSO canonical installation id, for device_secret introspection */
+  installation_id?: string;
+  /** Display name of the issuing application, when resolvable */
+  app_display_name?: string;
+  /** Device platform */
+  platform?: string;
+  /** User-set display name, or empty string when unset */
+  display_name?: string;
+  /** Fallback display name when user-set display name is absent */
+  fallback_display_name?: string;
   /** Additional claims */
   [key: string]: unknown;
 }
@@ -173,5 +183,21 @@ export class TokenIntrospector {
   async isActive(discovery: OIDCDiscoveryDocument, token: string): Promise<boolean> {
     const result = await this.introspect(discovery, { token });
     return result.active;
+  }
+
+  /**
+   * Introspect a Native SSO device_secret.
+   *
+   * This helper only sets the standard OAuth token_type_hint. Callers remain
+   * responsible for avoiding accidental logging of the raw device_secret.
+   */
+  async introspectDeviceSecret(
+    discovery: OIDCDiscoveryDocument,
+    deviceSecret: string
+  ): Promise<IntrospectionResponse> {
+    return this.introspect(discovery, {
+      token: deviceSecret,
+      tokenTypeHint: 'device_secret',
+    });
   }
 }

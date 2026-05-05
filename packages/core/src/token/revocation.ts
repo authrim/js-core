@@ -12,7 +12,7 @@ import { AuthrimError } from '../types/errors.js';
 /**
  * Token type hint for revocation
  */
-export type TokenTypeHint = 'access_token' | 'refresh_token';
+export type TokenTypeHint = 'access_token' | 'refresh_token' | 'device_secret';
 
 /**
  * Token revocation options
@@ -157,6 +157,19 @@ export class TokenRevoker {
         error: errorData?.error,
         error_description: errorData?.error_description,
       },
+    });
+  }
+
+  /**
+   * Revoke a Native SSO device_secret.
+   *
+   * This helper only sets the standard OAuth token_type_hint. Callers remain
+   * responsible for avoiding accidental logging of the raw device_secret.
+   */
+  async revokeDeviceSecret(discovery: OIDCDiscoveryDocument, deviceSecret: string): Promise<void> {
+    return this.revoke(discovery, {
+      token: deviceSecret,
+      tokenTypeHint: 'device_secret',
     });
   }
 }

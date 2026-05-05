@@ -5,7 +5,7 @@
  * Uses 2-step pattern: buildAuthorizationUrl() + handleCallback()
  */
 
-import type { HttpClient } from '../providers/http.js';
+import type { HttpClient, HttpResponse } from '../providers/http.js';
 import type { OIDCDiscoveryDocument } from '../types/oidc.js';
 import type { TokenSet, TokenResponse } from '../types/token.js';
 import type { AuthState } from './state.js';
@@ -37,6 +37,22 @@ export interface BuildAuthorizationUrlOptions {
   loginHint?: string;
   /** Requested Authentication Context Class Reference values */
   acrValues?: string;
+  /**
+   * Resource indicator for the access token.
+   *
+   * This is sent on the authorization request and preserved for the token
+   * request. When omitted, Authrim resolves the target from client metadata
+   * default resource and fails with invalid_target if no target exists.
+   */
+  resource?: string | string[];
+  /**
+   * Target audience for the access token.
+   *
+   * This is sent on the authorization request and preserved for the token
+   * request. When omitted, Authrim resolves the target from client metadata
+   * default resource and fails with invalid_target if no target exists.
+   */
+  audience?: string;
   /** Additional custom parameters */
   extraParams?: Record<string, string>;
   /**
@@ -104,6 +120,43 @@ export interface ExchangeCodeOptions {
   nonce: string;
   /** Requested scope (for validation) */
   scope: string;
+  /** Optional resource indicator for the token request */
+  resource?: string | string[];
+  /** Optional target audience for the token request */
+  audience?: string;
+  /** Optional DPoP proof JWT to attach to the token endpoint request */
+  dpopProof?: string;
+  /** Generate a fresh DPoP proof after receiving a DPoP-Nonce challenge */
+  dpopProofFactory?: (nonce: string) => Promise<string>;
+}
+
+function getHeader(headers: Record<string, string> | undefined, name: string): string | undefined {
+  if (!headers) {
+    return undefined;
+  }
+
+  const direct = headers[name];
+  if (direct) {
+    return direct;
+  }
+
+  const normalizedName = name.toLowerCase();
+  for (const [key, value] of Object.entries(headers)) {
+    if (key.toLowerCase() === normalizedName) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function isDPoPNonceRequiredResponse(response: HttpResponse<TokenResponse>): boolean {
+  if (response.ok) {
+    return false;
+  }
+
+  const errorData = response.data as unknown as Record<string, unknown>;
+  return errorData?.error === 'use_dpop_nonce';
 }
 
 /**
@@ -184,6 +237,15 @@ export class AuthorizationCodeFlow {
     if (options.acrValues) {
       params.set('acr_values', options.acrValues);
     }
+    if (options.audience) {
+      params.set('audience', options.audience);
+    }
+    if (options.resource) {
+      const resources = Array.isArray(options.resource) ? options.resource : [options.resource];
+      for (const resource of resources) {
+        params.append('resource', resource);
+      }
+    }
 
     // Extra custom parameters (with security parameter protection)
     if (options.extraParams) {
@@ -197,6 +259,8 @@ export class AuthorizationCodeFlow {
         'code_challenge',
         'code_challenge_method',
         'scope',
+        'resource',
+        'audience',
       ]);
 
       for (const [key, value] of Object.entries(options.extraParams)) {
@@ -295,18 +359,48 @@ export class AuthorizationCodeFlow {
       redirect_uri: options.redirectUri,
       code_verifier: options.codeVerifier,
     });
+    if (options.audience) {
+      body.set('audience', options.audience);
+    }
+    if (options.resource) {
+      const resources = Array.isArray(options.resource) ? options.resource : [options.resource];
+      for (const resource of resources) {
+        body.append('resource', resource);
+      }
+    }
 
-    // Make token request
-    let response;
-    try {
-      response = await this.http.fetch<TokenResponse>(tokenEndpoint, {
+    const makeTokenRequest = async (dpopProof?: string): Promise<HttpResponse<TokenResponse>> => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      };
+      if (dpopProof) {
+        headers.DPoP = dpopProof;
+      }
+
+      return this.http.fetch<TokenResponse>(tokenEndpoint, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+        headers,
         body: body.toString(),
       });
+    };
+
+    // Make token request. DPoP nonce challenges are retried once with a fresh proof.
+    let response: HttpResponse<TokenResponse>;
+    try {
+      response = await makeTokenRequest(options.dpopProof);
+
+      if (isDPoPNonceRequiredResponse(response) && options.dpopProofFactory) {
+        const nonce = getHeader(response.headers, 'DPoP-Nonce');
+        if (nonce) {
+          const retryProof = await options.dpopProofFactory(nonce);
+          response = await makeTokenRequest(retryProof);
+        }
+      }
     } catch (error) {
+      if (error instanceof AuthrimError) {
+        throw error;
+      }
+
       throw new AuthrimError('network_error', 'Token request failed', {
         cause: error instanceof Error ? error : undefined,
       });
@@ -484,12 +578,21 @@ export class AuthorizationCodeFlow {
     // Build token set
     const tokenSet: TokenSet = {
       accessToken: tokenResponse.access_token,
-      tokenType: (tokenResponse.token_type as 'Bearer') ?? 'Bearer',
+      tokenType: tokenResponse.token_type === 'DPoP' ? 'DPoP' : 'Bearer',
       expiresAt,
       refreshToken: tokenResponse.refresh_token,
       idToken: tokenResponse.id_token,
       scope: tokenResponse.scope,
     };
+    if (tokenResponse.refresh_token_expires_in !== undefined) {
+      tokenSet.refreshTokenExpiresIn = tokenResponse.refresh_token_expires_in;
+    }
+    if (tokenResponse.refresh_token_expires_at_unix !== undefined) {
+      tokenSet.refreshTokenExpiresAt = tokenResponse.refresh_token_expires_at_unix;
+    }
+    if (tokenResponse.refresh_token_expires_at !== undefined) {
+      tokenSet.refreshTokenExpiresAtIso = tokenResponse.refresh_token_expires_at;
+    }
 
     // Log successful authentication
     this.diagnosticLogger?.logAuthDecision({

@@ -6,9 +6,19 @@
 
 import type { AuthrimClientConfig, ResolvedConfig } from './config.js';
 import type { OIDCDiscoveryDocument, UserInfo } from '../types/oidc.js';
-import type { TokenSet, TokenExchangeRequest, TokenExchangeResult } from '../types/token.js';
+import type {
+  TokenSet,
+  TokenExchangeRequest,
+  TokenExchangeResult,
+  NativeSSOTokenExchangeRequest,
+} from '../types/token.js';
 import type { AuthrimEventName, AuthrimEventHandler } from '../events/types.js';
 import type { DeviceFlowState, DeviceFlowPollResult, DeviceFlowStartOptions } from '../types/device-flow.js';
+import type {
+  StepUpActionResponse,
+  StepUpCompleteRequest,
+  StepUpStartRequest,
+} from '../types/step-up.js';
 import type { PARResult } from '../types/par.js';
 import type { DPoPCryptoProvider } from '../types/dpop.js';
 import type { CryptoProvider } from '../providers/crypto.js';
@@ -24,6 +34,13 @@ import {
 } from '../auth/authorization-code.js';
 import { PARClient } from '../auth/par.js';
 import { DeviceFlowClient } from '../auth/device-flow.js';
+import { StepUpClient } from '../step-up/client.js';
+import {
+  CustomerProfileClient,
+  type CustomerProfileDelegatedWriteOptions,
+  type CustomerProfileElevationReadOptions,
+  type CustomerProfileUpdateInput,
+} from '../product/customer-profile.js';
 import { DPoPManager } from '../security/dpop.js';
 import { TokenManager } from '../token/manager.js';
 import {
@@ -84,6 +101,12 @@ export class AuthrimClient {
   /** Device Flow client */
   private readonly deviceFlowClient: DeviceFlowClient;
 
+  /** Canonical Step-Up client */
+  private readonly stepUpClient: StepUpClient;
+
+  /** Customer profile product protected resource client */
+  private readonly customerProfileClient: CustomerProfileClient;
+
   /** DPoP manager (lazily initialized) */
   private dpopManager: DPoPManager | null = null;
 
@@ -117,6 +140,54 @@ export class AuthrimClient {
   /** Diagnostic logger (optional, for OIDF conformance testing) */
   private diagnosticLogger: IDiagnosticLogger | null = null;
 
+  private getOrCreateDPoPManager(): DPoPManager | null {
+    const cryptoWithDPoP = this.config.crypto as DPoPCryptoProvider;
+    if (!cryptoWithDPoP.generateDPoPKeyPair) {
+      return null;
+    }
+
+    if (!this.dpopManager) {
+      this.dpopManager = new DPoPManager(
+        this.config.crypto as CryptoProvider & DPoPCryptoProvider,
+        { algorithm: this.config.dpop.algorithm }
+      );
+    }
+
+    return this.dpopManager;
+  }
+
+  private async generateTokenRequestDPoPProof(
+    tokenEndpoint: string,
+    nonce?: string
+  ): Promise<string> {
+    const manager = this.getOrCreateDPoPManager();
+    if (!manager) {
+      throw new AuthrimError(
+        'dpop_key_generation_error',
+        'DPoP token request is enabled but the configured CryptoProvider does not support DPoP'
+      );
+    }
+    if (!manager.isInitialized()) {
+      await manager.initialize();
+    }
+    if (nonce) {
+      manager.handleNonceResponse(nonce);
+    }
+    return manager.generateProof('POST', tokenEndpoint, nonce ? { nonce } : undefined);
+  }
+
+  private async clearDPoPLocalState(): Promise<void> {
+    if (this.dpopManager) {
+      await this.dpopManager.clear();
+      return;
+    }
+
+    const cryptoWithDPoP = this.config.crypto as DPoPCryptoProvider;
+    if (cryptoWithDPoP.clearDPoPKeyPair) {
+      await cryptoWithDPoP.clearDPoPKeyPair();
+    }
+  }
+
   /**
    * Get the event emitter for subscribing to SDK events
    */
@@ -148,6 +219,16 @@ export class AuthrimClient {
     this.parClient = new PARClient(this.config.http, this.config.clientId);
 
     this.deviceFlowClient = new DeviceFlowClient(this.config.http, this.config.clientId);
+
+    this.stepUpClient = new StepUpClient({
+      http: this.config.http,
+      issuer: this.normalizedIssuer,
+    });
+
+    this.customerProfileClient = new CustomerProfileClient({
+      http: this.config.http,
+      issuer: this.normalizedIssuer,
+    });
   }
 
   /**
@@ -282,6 +363,8 @@ export class AuthrimClient {
       redirectUri: options.redirectUri,
       codeVerifier: pkcePair.codeVerifier,
       scope,
+      resource: options.resource,
+      audience: options.audience,
       ttlSeconds: this.config.stateTtlSeconds,
     });
 
@@ -338,6 +421,9 @@ export class AuthrimClient {
     try {
       // Get discovery
       const discovery = await this.discover();
+      const dpopProof = this.config.dpop.tokenRequests
+        ? await this.generateTokenRequestDPoPProof(discovery.token_endpoint)
+        : undefined;
 
       // Exchange code for tokens
       const tokens = await this.authCodeFlow.exchangeCode(discovery, {
@@ -347,6 +433,12 @@ export class AuthrimClient {
         codeVerifier: authState.codeVerifier,
         nonce: authState.nonce,
         scope: authState.scope,
+        resource: authState.resource,
+        audience: authState.audience,
+        dpopProof,
+        dpopProofFactory: this.config.dpop.tokenRequests
+          ? (nonce) => this.generateTokenRequestDPoPProof(discovery.token_endpoint, nonce)
+          : undefined,
       });
 
       // Save tokens
@@ -403,6 +495,8 @@ export class AuthrimClient {
           redirectUri: options.redirectUri,
           codeVerifier: pkcePair.codeVerifier,
           scope,
+          resource: options.resource,
+          audience: options.audience,
           ttlSeconds: this.config.stateTtlSeconds,
         });
 
@@ -417,6 +511,8 @@ export class AuthrimClient {
           prompt: options.prompt,
           loginHint: options.loginHint,
           acrValues: options.acrValues,
+          resource: options.resource,
+          audience: options.audience,
           extraParams: options.extraParams,
         });
       },
@@ -522,6 +618,62 @@ export class AuthrimClient {
   }
 
   // ============================================================
+  // Step-Up API
+  // ============================================================
+
+  /**
+   * Canonical Step-Up API accessor.
+   *
+   * Defaults: token TTL 5 minutes, action TTL 10 minutes, receipt TTL 5 minutes,
+   * 5 attempts, 60 second resend cooldown, 3 max resends. Tenant policy may override.
+   */
+  get stepUp() {
+    this.ensureInitialized();
+    return {
+      start: (request: StepUpStartRequest): Promise<StepUpActionResponse> =>
+        this.stepUpClient.start(request),
+      getAction: (actionId: string): Promise<StepUpActionResponse> =>
+        this.stepUpClient.getAction(actionId),
+      complete: <Input = unknown>(
+        actionId: string,
+        request: StepUpCompleteRequest<Input>,
+        options?: Parameters<StepUpClient['complete']>[2]
+      ): Promise<StepUpActionResponse> => this.stepUpClient.complete(actionId, request, options),
+      resend: (
+        actionId: string,
+        options?: Parameters<StepUpClient['resend']>[1]
+      ): Promise<StepUpActionResponse> => this.stepUpClient.resend(actionId, options),
+      cancel: (actionId: string): Promise<StepUpActionResponse> =>
+        this.stepUpClient.cancel(actionId),
+    };
+  }
+
+  // ============================================================
+  // Product Protected Resources
+  // ============================================================
+
+  /**
+   * Customer profile product protected resource API.
+   *
+   * `getWithElevationGrant` is product-specific downstream elevation grant read access.
+   * `updateDelegated` is the standard delegated write path and requires a Step-Up receipt.
+   */
+  get customerProfiles() {
+    this.ensureInitialized();
+    return {
+      getWithElevationGrant: (
+        subjectUserId: string,
+        options: CustomerProfileElevationReadOptions
+      ) => this.customerProfileClient.getWithElevationGrant(subjectUserId, options),
+      updateDelegated: (
+        subjectUserId: string,
+        input: CustomerProfileUpdateInput,
+        options: CustomerProfileDelegatedWriteOptions
+      ) => this.customerProfileClient.updateDelegated(subjectUserId, input, options),
+    };
+  }
+
+  // ============================================================
   // DPoP API (RFC 9449)
   // ============================================================
 
@@ -538,21 +690,10 @@ export class AuthrimClient {
    * @returns DPoP API accessor, or undefined if not supported
    */
   get dpop() {
-    // Check if crypto provider supports DPoP
-    const cryptoWithDPoP = this.config.crypto as DPoPCryptoProvider;
-    if (!cryptoWithDPoP.generateDPoPKeyPair) {
+    const manager = this.getOrCreateDPoPManager();
+    if (!manager) {
       return undefined;
     }
-
-    // Lazily initialize DPoP manager
-    if (!this.dpopManager) {
-      // Cast to the combined type that DPoPManager expects
-      this.dpopManager = new DPoPManager(
-        this.config.crypto as CryptoProvider & DPoPCryptoProvider
-      );
-    }
-
-    const manager = this.dpopManager;
 
     return {
       /**
@@ -672,6 +813,18 @@ export class AuthrimClient {
       },
 
       /**
+       * Exchange an ID Token + device_secret using the Native SSO token exchange profile.
+       *
+       * Requires channel=native and a DPoP proof.
+       */
+      exchangeNativeSSO: async (
+        request: NativeSSOTokenExchangeRequest
+      ): Promise<TokenExchangeResult> => {
+        await this.discover();
+        return this.tokenManager.exchangeNativeSSOToken(request);
+      },
+
+      /**
        * Introspect a token (RFC 7662)
        *
        * Validates a token server-side and returns its metadata.
@@ -766,7 +919,9 @@ export class AuthrimClient {
       // Discovery failure is OK for logout - we can still do local logout
     }
 
-    return this.logoutHandler.logout(discovery, options);
+    const result = await this.logoutHandler.logout(discovery, options);
+    await this.clearDPoPLocalState();
+    return result;
   }
 
   // ============================================================
