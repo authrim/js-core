@@ -27,6 +27,7 @@ import type {
 import type { CryptoProvider } from '../providers/crypto.js';
 import { AuthrimError } from '../types/errors.js';
 import { base64urlEncode, stringToBase64url } from '../utils/base64url.js';
+import { createIdempotencyKey } from '../utils/idempotency.js';
 
 /**
  * DPoP Manager
@@ -237,9 +238,6 @@ export class DPoPManager {
    * Generate a unique JWT ID (jti)
    */
   private generateJti(): string {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    return createIdempotencyKey();
   }
 }

@@ -18,6 +18,7 @@ import type {
   JARRequestObjectClaims,
 } from '../types/jar.js';
 import { AuthrimError } from '../types/errors.js';
+import { createIdempotencyKey } from '../utils/idempotency.js';
 
 /**
  * JAR Builder
@@ -122,10 +123,7 @@ export class JARBuilder {
    * Generate a unique JWT ID (jti)
    */
   private generateJti(): string {
-    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
-      return crypto.randomUUID();
-    }
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    return createIdempotencyKey();
   }
 }
 
