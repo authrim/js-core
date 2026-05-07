@@ -14,6 +14,12 @@
 
 import type { DebugLogger } from './types.js';
 
+const DEFAULT_MAX_LOGS = 1000;
+const MAX_ALLOWED_LOGS = 10000;
+const DEFAULT_BATCH_SIZE = 50;
+const MAX_BATCH_SIZE = 100;
+const DIAGNOSTIC_SEND_TIMEOUT_MS = 10000;
+
 /**
  * Diagnostic log level
  */
@@ -210,14 +216,14 @@ export class DiagnosticLogger implements IDiagnosticLogger {
     this.enabled = options.enabled;
     this.debugLogger = options.debugLogger;
     this.collectLogs = options.collectLogs ?? false;
-    this.maxLogs = options.maxLogs ?? 1000;
+    this.maxLogs = clampInteger(options.maxLogs ?? DEFAULT_MAX_LOGS, 1, MAX_ALLOWED_LOGS);
 
     // Server sending options
     this.sendToServer = options.sendToServer ?? false;
     this.serverUrl = options.serverUrl;
     this.clientId = options.clientId;
     this.clientSecret = options.clientSecret;
-    this.batchSize = options.batchSize ?? 50;
+    this.batchSize = clampInteger(options.batchSize ?? DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE);
     this.flushIntervalMs = options.flushIntervalMs ?? 5000;
 
     // Validate server sending config
@@ -411,6 +417,8 @@ export class DiagnosticLogger implements IDiagnosticLogger {
     const logsToSend = [...this.sendBuffer];
     this.sendBuffer = [];
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), DIAGNOSTIC_SEND_TIMEOUT_MS);
     try {
       const response = await fetch(`${this.serverUrl}/api/v1/diagnostic-logs/ingest`, {
         method: 'POST',
@@ -423,6 +431,7 @@ export class DiagnosticLogger implements IDiagnosticLogger {
           client_id: this.clientId,
           client_secret: this.clientSecret,
         }),
+        signal: controller.signal,
       });
 
       if (!response.ok) {
@@ -435,6 +444,7 @@ export class DiagnosticLogger implements IDiagnosticLogger {
     } catch (error) {
       this.handleSendFailure(logsToSend, error instanceof Error ? error.message : String(error));
     } finally {
+      clearTimeout(timeoutId);
       this.isFlushing = false;
     }
   }
@@ -486,6 +496,13 @@ export class DiagnosticLogger implements IDiagnosticLogger {
   private generateEntryId(): string {
     return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   }
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) {
+    return min;
+  }
+  return Math.min(max, Math.max(min, Math.trunc(value)));
 }
 
 /**

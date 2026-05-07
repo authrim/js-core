@@ -60,6 +60,8 @@ export type {
   EmailCodeVerifyResponse,
   DirectAuthTokenRequest,
   DirectAuthTokenResponse,
+  DirectAuthManagedSessionRequest,
+  DirectAuthManagedSessionResponse,
   // WebAuthn JSON
   PublicKeyCredentialRequestOptionsJSON,
   PublicKeyCredentialCreationOptionsJSON,

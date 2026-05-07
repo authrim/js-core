@@ -10,6 +10,14 @@ import { base64urlToString } from './base64url.js';
 import type { IdTokenClaims } from '../types/oidc.js';
 
 /**
+ * Maximum JWT size in bytes.
+ *
+ * Decoding is intentionally bounded so malformed or attacker-controlled tokens
+ * cannot force large base64/JSON allocations in browser or native clients.
+ */
+const MAX_JWT_SIZE = 8192;
+
+/**
  * JWT Header
  */
 export interface JwtHeader {
@@ -40,6 +48,10 @@ export interface DecodedJwt<T = Record<string, unknown>> {
  * @throws Error if the JWT format is invalid
  */
 export function decodeJwt<T = Record<string, unknown>>(jwt: string): DecodedJwt<T> {
+  if (jwt.length > MAX_JWT_SIZE) {
+    throw new Error(`Invalid JWT format: exceeds maximum size of ${MAX_JWT_SIZE} bytes`);
+  }
+
   const parts = jwt.split('.');
   if (parts.length !== 3) {
     throw new Error('Invalid JWT format: expected 3 parts');

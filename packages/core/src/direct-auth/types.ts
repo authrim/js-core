@@ -518,6 +518,44 @@ export interface DirectAuthTokenResponse {
   device_secret?: string;
 }
 
+/**
+ * Managed browser session finish request.
+ *
+ * Platform/browser adapters use this to redeem a Direct Auth artifact into an
+ * HttpOnly cookie backed by an Authrim server-side session. It is intentionally
+ * separate from DirectAuthTokenRequest because it must not return OAuth/OIDC
+ * token material to browser JavaScript.
+ */
+export interface DirectAuthManagedSessionRequest {
+  direct_auth_artifact: string;
+  client_id: string;
+  code_verifier: string;
+  channel: 'browser';
+  provider_id?: string;
+}
+
+/**
+ * Managed browser session finish response.
+ *
+ * This response may include session/user display metadata, but not access,
+ * refresh, or ID tokens.
+ */
+export interface DirectAuthManagedSessionResponse {
+  ok: true;
+  expires_in: number;
+  session: {
+    id: string;
+    userId: string;
+    createdAt: number;
+    expiresAt: number;
+  };
+  user: {
+    id: string;
+    email: string;
+    name?: string | null;
+  };
+}
+
 // =============================================================================
 // WebAuthn JSON Types (for JSON serialization)
 // =============================================================================

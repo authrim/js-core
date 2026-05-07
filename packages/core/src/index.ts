@@ -162,6 +162,13 @@ export {
   type SessionCheckResult,
   type TokenApiClientOptions,
 } from './session/token-api.js';
+export {
+  AUTHRIM_MANAGED_BROWSER_SESSION_PROFILE,
+  assertNoBrowserTokenMaterial,
+  hasBrowserTokenMaterial,
+  type AuthrimSessionProfile,
+  type AuthrimWebSdkProfile,
+} from './session/profiles.js';
 export { SessionManager, type SessionManagerOptions } from './session/manager.js';
 export {
   SessionStateCalculator,
