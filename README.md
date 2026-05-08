@@ -22,6 +22,7 @@ This monorepo contains the official client libraries for integrating with Authri
 ### Core Features (`@authrim/core`)
 
 - **Authorization Code Flow with PKCE** - RFC 7636 compliant
+- **DPoP Primitives** - Proof generation, nonce handling, and sender-constrained token support for platform SDKs
 - **Automatic Token Refresh** - With request coalescing for concurrent calls
 - **Token Exchange** - RFC 8693 for delegation and cross-service scenarios
 - **Token Introspection** - RFC 7662 server-side validation

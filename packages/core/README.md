@@ -20,6 +20,7 @@ npm install @authrim/core
 ## Features
 
 - **Authorization Code Flow with PKCE** - RFC 7636 compliant
+- **DPoP Primitives** - Proof generation, nonce handling, and sender-constrained token support for platform SDKs
 - **Automatic Token Refresh** - With request coalescing for concurrent calls
 - **Token Exchange** - RFC 8693 for delegation and cross-service scenarios
 - **Token Introspection** - RFC 7662 server-side validation
@@ -174,9 +175,10 @@ interface HttpClient {
 
 | Package | Description |
 |---------|-------------|
-| `@authrim/web` | Browser implementation (planned) |
+| `@authrim/web` | Browser implementation |
 | `@authrim/react` | React hooks and components (planned) |
-| `@authrim/svelte` | Svelte/SvelteKit integration (planned) |
+| `@authrim/sveltekit` | SvelteKit integration |
+| `@authrim/server` | Server-side resource server and BFF helpers |
 
 ## Requirements
 
