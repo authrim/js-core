@@ -46,10 +46,7 @@ export class PARClient {
     const parEndpoint = discovery.pushed_authorization_request_endpoint;
 
     if (!parEndpoint) {
-      throw new AuthrimError(
-        'no_par_endpoint',
-        'PAR endpoint not available in discovery document'
-      );
+      throw new AuthrimError('no_par_endpoint', 'PAR endpoint not available in discovery document');
     }
 
     // Build PAR request body
@@ -73,6 +70,9 @@ export class PARClient {
     }
     if (request.loginHint) {
       body.set('login_hint', request.loginHint);
+    }
+    if (request.maxAge !== undefined) {
+      body.set('max_age', String(request.maxAge));
     }
     if (request.acrValues) {
       body.set('acr_values', request.acrValues);
@@ -100,6 +100,10 @@ export class PARClient {
         'scope',
         'resource',
         'audience',
+        'prompt',
+        'max_age',
+        'login_hint',
+        'acr_values',
       ]);
 
       for (const [key, value] of Object.entries(request.extraParams)) {
@@ -168,10 +172,7 @@ export class PARClient {
    * @param requestUri - Request URI from PAR response
    * @returns Authorization URL
    */
-  buildAuthorizationUrlWithPar(
-    discovery: OIDCDiscoveryDocument,
-    requestUri: string
-  ): string {
+  buildAuthorizationUrlWithPar(discovery: OIDCDiscoveryDocument, requestUri: string): string {
     const params = new URLSearchParams();
     params.set('client_id', this.clientId);
     params.set('request_uri', requestUri);

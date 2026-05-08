@@ -78,7 +78,18 @@ export type {
   DPoPProofOptions,
   DPoPManagerConfig,
   DPoPCryptoProvider,
+  DPoPClientMetadata,
+  DPoPKeyStorageFallbackPolicy,
 } from './dpop.js';
+export type {
+  AuthrimHandoffMethod,
+  AuthrimLoginChallengeRuntimeMetadata,
+  AuthrimOidcPromptMetadata,
+  AuthrimSessionProfile,
+  AuthrimWebOriginRegistryEntry,
+  AuthrimWebOriginRegistryMetadata,
+  AuthrimWebSdkProfile,
+} from '../session/profiles.js';
 export type {
   JARRequestObjectClaims,
   JARBuilderConfig,

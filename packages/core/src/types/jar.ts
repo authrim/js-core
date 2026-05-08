@@ -43,6 +43,8 @@ export interface JARRequestObjectClaims {
   prompt?: string;
   /** Login hint */
   login_hint?: string;
+  /** Maximum authentication age in seconds */
+  max_age?: number;
   /** ACR values */
   acr_values?: string;
   // Additional claims
@@ -95,6 +97,8 @@ export interface JARRequestOptions {
   prompt?: string;
   /** Login hint */
   loginHint?: string;
+  /** Maximum authentication age in seconds */
+  maxAge?: number;
   /** ACR values */
   acrValues?: string;
   /** Additional claims */

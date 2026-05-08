@@ -30,6 +30,8 @@ export interface PARRequest {
   prompt?: 'none' | 'login' | 'consent' | 'select_account';
   /** Hint about the login identifier */
   loginHint?: string;
+  /** Maximum authentication age in seconds (OIDC max_age) */
+  maxAge?: number;
   /** Requested Authentication Context Class Reference values */
   acrValues?: string;
   /** Resource indicator for the access token */

@@ -331,7 +331,7 @@ export type DirectAuthLogoutScope = 'local' | 'group' | 'global';
 export interface DirectAuthLogoutOptions {
   /** Revoke refresh tokens */
   revokeTokens?: boolean;
-  /** Authrim logout propagation scope. Defaults server-side to group. */
+  /** Authrim logout propagation scope. Omit for current-client local logout. */
   logoutScope?: DirectAuthLogoutScope;
   /** Post-logout redirect URI */
   redirectUri?: string;

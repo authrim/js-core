@@ -192,6 +192,87 @@ describe('Authorization Flow', () => {
     });
   });
 
+  describe('OIDC max_age auth_time validation', () => {
+    it('should require auth_time when max_age was requested', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({ nonce });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenResponse({ id_token: idToken }),
+      }));
+
+      await expect(
+        authCodeFlow.exchangeCode(discovery, {
+          code: 'auth-code',
+          state: 'test-state',
+          redirectUri,
+          codeVerifier: 'test-verifier',
+          nonce,
+          scope: 'openid profile',
+          maxAge: 300,
+        })
+      ).rejects.toMatchObject({ code: 'invalid_id_token' });
+    });
+
+    it('should reject stale auth_time when max_age was requested', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({
+        nonce,
+        auth_time: Math.floor(Date.now() / 1000) - 1000,
+      });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenResponse({ id_token: idToken }),
+      }));
+
+      await expect(
+        authCodeFlow.exchangeCode(discovery, {
+          code: 'auth-code',
+          state: 'test-state',
+          redirectUri,
+          codeVerifier: 'test-verifier',
+          nonce,
+          scope: 'openid profile',
+          maxAge: 300,
+        })
+      ).rejects.toMatchObject({ code: 'invalid_id_token' });
+    });
+
+    it('should accept fresh auth_time when max_age was requested', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const nonce = 'valid-nonce';
+      const idToken = createMockIdToken({
+        nonce,
+        auth_time: Math.floor(Date.now() / 1000),
+        amr: ['pwd', 'webauthn'],
+      });
+
+      http.setHandler(() => ({
+        ok: true,
+        status: 200,
+        data: createMockTokenResponse({ id_token: idToken }),
+      }));
+
+      const tokens = await authCodeFlow.exchangeCode(discovery, {
+        code: 'auth-code',
+        state: 'test-state',
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        nonce,
+        scope: 'openid profile',
+        maxAge: 300,
+      });
+
+      expect(tokens.accessToken).toBe('mock-access-token');
+    });
+  });
+
   describe('DPoP token request binding', () => {
     it('sends resource and audience on authorization code token requests', async () => {
       const discovery = createMockDiscoveryDocument(issuer);
@@ -387,6 +468,34 @@ describe('Authorization Flow', () => {
   });
 
   describe('Security Parameter Protection', () => {
+    it('should include typed OIDC authentication request parameters', async () => {
+      const discovery = createMockDiscoveryDocument(issuer);
+      const authState = await stateManager.generateAuthState({
+        redirectUri,
+        codeVerifier: 'test-verifier',
+        scope: 'openid profile',
+      });
+      const pkce = {
+        codeVerifier: 'test-verifier',
+        codeChallenge: 'test-challenge',
+        codeChallengeMethod: 'S256' as const,
+      };
+
+      const result = authCodeFlow.buildAuthorizationUrl(discovery, authState, pkce, {
+        redirectUri,
+        prompt: 'login',
+        loginHint: 'user@example.com',
+        maxAge: 300,
+        acrValues: 'urn:authrim:loa:2',
+      });
+
+      const url = new URL(result.url);
+      expect(url.searchParams.get('prompt')).toBe('login');
+      expect(url.searchParams.get('login_hint')).toBe('user@example.com');
+      expect(url.searchParams.get('max_age')).toBe('300');
+      expect(url.searchParams.get('acr_values')).toBe('urn:authrim:loa:2');
+    });
+
     it('should not allow extraParams to override security parameters', async () => {
       const discovery = createMockDiscoveryDocument(issuer);
 
@@ -419,6 +528,10 @@ describe('Authorization Flow', () => {
           scope: 'admin',
           resource: 'https://attacker.example.com',
           audience: 'https://attacker.example.com',
+          prompt: 'none',
+          login_hint: 'attacker@example.com',
+          max_age: '0',
+          acr_values: 'urn:attacker',
         },
       });
 
@@ -437,6 +550,10 @@ describe('Authorization Flow', () => {
         'https://api.example.com/profile',
       ]);
       expect(url.searchParams.get('audience')).toBe('https://api.example.com');
+      expect(url.searchParams.get('prompt')).toBeNull();
+      expect(url.searchParams.get('login_hint')).toBeNull();
+      expect(url.searchParams.get('max_age')).toBeNull();
+      expect(url.searchParams.get('acr_values')).toBeNull();
     });
 
     it('should allow non-security extraParams', async () => {

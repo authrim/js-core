@@ -28,6 +28,8 @@ export interface AuthState {
   resource?: string | string[];
   /** Requested audience for the token request */
   audience?: string;
+  /** Maximum authentication age requested for this authorization request */
+  maxAge?: number;
   /** Timestamp when state was created */
   createdAt: number;
   /** Timestamp when state expires */
@@ -44,9 +46,9 @@ export interface AuthState {
  * Controls which returnTo URLs are accepted to prevent open redirect attacks.
  */
 export type ReturnToPolicy =
-  | 'relative_only'     // Default: relative paths only (/dashboard)
-  | 'same_origin'       // Same origin only
-  | 'allowlist';        // Explicit allowlist
+  | 'relative_only' // Default: relative paths only (/dashboard)
+  | 'same_origin' // Same origin only
+  | 'allowlist'; // Explicit allowlist
 
 /**
  * ReturnTo URL options
@@ -86,6 +88,8 @@ export interface GenerateAuthStateOptions {
    * the token endpoint fails with invalid_target.
    */
   audience?: string;
+  /** Maximum authentication age in seconds (OIDC max_age) */
+  maxAge?: number;
   /** TTL in seconds (default: 600 = 10 minutes) */
   ttlSeconds?: number;
   /** Return URL after authentication */
@@ -187,6 +191,7 @@ export class StateManager {
       scope: options.scope,
       resource: options.resource,
       audience: options.audience,
+      maxAge: options.maxAge,
       createdAt: now,
       expiresAt: now + ttlSeconds * 1000,
       returnTo: validatedReturnTo,
@@ -228,8 +233,9 @@ export class StateManager {
         try {
           // For non-browser environments, currentOrigin must be provided
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const globalWindow = typeof globalThis !== 'undefined' ? (globalThis as any).window : undefined;
-          const currentOrigin = options.currentOrigin ?? (globalWindow?.location?.origin);
+          const globalWindow =
+            typeof globalThis !== 'undefined' ? (globalThis as any).window : undefined;
+          const currentOrigin = options.currentOrigin ?? globalWindow?.location?.origin;
           if (!currentOrigin) {
             throw new AuthrimError(
               'invalid_return_to',
@@ -283,10 +289,7 @@ export class StateManager {
         );
 
       default:
-        throw new AuthrimError(
-          'invalid_return_to',
-          `Unknown returnTo policy: ${options.policy}`
-        );
+        throw new AuthrimError('invalid_return_to', `Unknown returnTo policy: ${options.policy}`);
     }
   }
 

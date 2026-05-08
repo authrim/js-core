@@ -13,7 +13,11 @@ import type {
   NativeSSOTokenExchangeRequest,
 } from '../types/token.js';
 import type { AuthrimEventName, AuthrimEventHandler } from '../events/types.js';
-import type { DeviceFlowState, DeviceFlowPollResult, DeviceFlowStartOptions } from '../types/device-flow.js';
+import type {
+  DeviceFlowState,
+  DeviceFlowPollResult,
+  DeviceFlowStartOptions,
+} from '../types/device-flow.js';
 import type {
   StepUpActionResponse,
   StepUpCompleteRequest,
@@ -365,6 +369,7 @@ export class AuthrimClient {
       scope,
       resource: options.resource,
       audience: options.audience,
+      maxAge: options.maxAge,
       ttlSeconds: this.config.stateTtlSeconds,
     });
 
@@ -435,6 +440,7 @@ export class AuthrimClient {
         scope: authState.scope,
         resource: authState.resource,
         audience: authState.audience,
+        maxAge: authState.maxAge,
         dpopProof,
         dpopProofFactory: this.config.dpop.tokenRequests
           ? (nonce) => this.generateTokenRequestDPoPProof(discovery.token_endpoint, nonce)
@@ -497,6 +503,7 @@ export class AuthrimClient {
           scope,
           resource: options.resource,
           audience: options.audience,
+          maxAge: options.maxAge,
           ttlSeconds: this.config.stateTtlSeconds,
         });
 
@@ -510,6 +517,7 @@ export class AuthrimClient {
           codeChallengeMethod: 'S256',
           prompt: options.prompt,
           loginHint: options.loginHint,
+          maxAge: options.maxAge,
           acrValues: options.acrValues,
           resource: options.resource,
           audience: options.audience,
@@ -758,8 +766,10 @@ export class AuthrimClient {
        */
       isServerSupported: async (): Promise<boolean> => {
         const discovery = await this.discover();
-        return Array.isArray(discovery.dpop_signing_alg_values_supported) &&
-          discovery.dpop_signing_alg_values_supported.length > 0;
+        return (
+          Array.isArray(discovery.dpop_signing_alg_values_supported) &&
+          discovery.dpop_signing_alg_values_supported.length > 0
+        );
       },
     };
   }

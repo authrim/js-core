@@ -26,7 +26,7 @@ export interface LogoutOptions {
   idTokenHint?: string;
   /** State parameter for post-logout redirect */
   state?: string;
-  /** Authrim logout propagation scope. Defaults server-side to group. */
+  /** Authrim logout propagation scope. Direct Auth defaults to current-client local logout. */
   logoutScope?: LogoutScope;
   /** Whether to revoke tokens before logout (requires revocation_endpoint) */
   revokeTokens?: boolean;

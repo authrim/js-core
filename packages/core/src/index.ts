@@ -109,6 +109,8 @@ export type {
   DPoPProofOptions,
   DPoPManagerConfig,
   DPoPCryptoProvider,
+  DPoPClientMetadata,
+  DPoPKeyStorageFallbackPolicy,
 } from './types/dpop.js';
 export { JARBuilder, isJarRequired } from './security/jar.js';
 export type { JARRequestObjectClaims, JARBuilderConfig, JARRequestOptions } from './types/jar.js';
@@ -166,7 +168,12 @@ export {
   AUTHRIM_MANAGED_BROWSER_SESSION_PROFILE,
   assertNoBrowserTokenMaterial,
   hasBrowserTokenMaterial,
+  type AuthrimHandoffMethod,
+  type AuthrimLoginChallengeRuntimeMetadata,
+  type AuthrimOidcPromptMetadata,
   type AuthrimSessionProfile,
+  type AuthrimWebOriginRegistryEntry,
+  type AuthrimWebOriginRegistryMetadata,
   type AuthrimWebSdkProfile,
 } from './session/profiles.js';
 export { SessionManager, type SessionManagerOptions } from './session/manager.js';

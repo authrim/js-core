@@ -35,6 +35,8 @@ export interface BuildAuthorizationUrlOptions {
   prompt?: 'none' | 'login' | 'consent' | 'select_account';
   /** Hint about the login identifier */
   loginHint?: string;
+  /** Maximum authentication age in seconds (OIDC max_age) */
+  maxAge?: number;
   /** Requested Authentication Context Class Reference values */
   acrValues?: string;
   /**
@@ -124,6 +126,8 @@ export interface ExchangeCodeOptions {
   resource?: string | string[];
   /** Optional target audience for the token request */
   audience?: string;
+  /** Maximum authentication age in seconds requested with OIDC max_age */
+  maxAge?: number;
   /** Optional DPoP proof JWT to attach to the token endpoint request */
   dpopProof?: string;
   /** Generate a fresh DPoP proof after receiving a DPoP-Nonce challenge */
@@ -234,6 +238,9 @@ export class AuthorizationCodeFlow {
     if (options.loginHint) {
       params.set('login_hint', options.loginHint);
     }
+    if (options.maxAge !== undefined) {
+      params.set('max_age', String(options.maxAge));
+    }
     if (options.acrValues) {
       params.set('acr_values', options.acrValues);
     }
@@ -261,6 +268,10 @@ export class AuthorizationCodeFlow {
         'scope',
         'resource',
         'audience',
+        'prompt',
+        'max_age',
+        'login_hint',
+        'acr_values',
       ]);
 
       for (const [key, value] of Object.entries(options.extraParams)) {
@@ -513,6 +524,49 @@ export class AuthorizationCodeFlow {
         result: 'pass',
         actual: claims.exp,
       });
+
+      // OIDC Core §3.1.2.1: max_age requires an auth_time claim and freshness check.
+      if (options.maxAge !== undefined) {
+        const authTime = claims.auth_time;
+        if (typeof authTime !== 'number') {
+          this.diagnosticLogger?.logTokenValidation({
+            step: 'auth-time-check',
+            tokenType: 'id_token',
+            result: 'fail',
+            expected: 'auth_time claim present',
+            actual: typeof authTime,
+            errorMessage: 'ID token auth_time claim is required when max_age was requested',
+          });
+          throw new AuthrimError(
+            'invalid_id_token',
+            'ID token auth_time claim is required when max_age was requested'
+          );
+        }
+
+        const maxAgeSkewSeconds = 60;
+        if (now - authTime > options.maxAge + maxAgeSkewSeconds) {
+          this.diagnosticLogger?.logTokenValidation({
+            step: 'auth-time-check',
+            tokenType: 'id_token',
+            result: 'fail',
+            expected: `auth_time within ${options.maxAge}s`,
+            actual: authTime,
+            errorMessage: 'ID token auth_time is older than requested max_age',
+          });
+          throw new AuthrimError(
+            'invalid_id_token',
+            'ID token auth_time is older than requested max_age'
+          );
+        }
+
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'auth-time-check',
+          tokenType: 'id_token',
+          result: 'pass',
+          expected: `auth_time within ${options.maxAge}s`,
+          actual: authTime,
+        });
+      }
 
       // 4. Signature check: per OIDC spec §3.1.3.7 #6, when the ID Token is received
       // via direct TLS-protected communication with the Token Endpoint (authorization code flow),

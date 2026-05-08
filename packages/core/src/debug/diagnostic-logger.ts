@@ -32,6 +32,7 @@ export type TokenValidationStep =
   | 'issuer-check'
   | 'audience-check'
   | 'expiry-check'
+  | 'auth-time-check'
   | 'nonce-check'
   | 'signature-check'
   | 'hash-check';

@@ -249,6 +249,9 @@ export type AuthrimErrorCode =
   | 'dpop_key_generation_error'
   | 'dpop_proof_generation_error'
   | 'dpop_nonce_required'
+  | 'dpop_replay_rejected'
+  | 'token_binding_failed'
+  | 'refresh_token_reuse_detected'
   // JAR errors (RFC 9101)
   | 'jar_signing_error'
   | 'jar_required'
@@ -1072,6 +1075,24 @@ const ERROR_META_MAP: Record<AuthrimErrorCode, AuthrimErrorMeta> = {
     maxRetries: 1,
     userAction: 'none',
     severity: 'warning',
+  },
+  dpop_replay_rejected: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'fatal',
+  },
+  token_binding_failed: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'fatal',
+  },
+  refresh_token_reuse_detected: {
+    transient: false,
+    retryable: false,
+    userAction: 'reauthenticate',
+    severity: 'fatal',
   },
 
   // JAR errors (RFC 9101)

@@ -48,6 +48,25 @@ export interface JWK {
  */
 export type DPoPAlgorithm = 'ES256' | 'PS256' | 'EdDSA';
 
+export type DPoPKeyStorageFallbackPolicy =
+  | 'fail_closed'
+  | 'wrapped_exported_key'
+  | 'memory_only_key';
+
+export interface DPoPClientMetadata {
+  required: boolean;
+  algorithm: DPoPAlgorithm;
+  key_scope: {
+    issuer: string;
+    client_id: string;
+  };
+  storage_fallback_policy: DPoPKeyStorageFallbackPolicy;
+  nonce_retry: {
+    enabled: boolean;
+    max_retries: 1;
+  };
+}
+
 /**
  * DPoP key pair interface
  *

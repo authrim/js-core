@@ -12,11 +12,7 @@
  * or can be passed by reference using the 'request_uri' parameter (with PAR).
  */
 
-import type {
-  JARBuilderConfig,
-  JARRequestOptions,
-  JARRequestObjectClaims,
-} from '../types/jar.js';
+import type { JARBuilderConfig, JARRequestOptions, JARRequestObjectClaims } from '../types/jar.js';
 import { AuthrimError } from '../types/errors.js';
 import { createIdempotencyKey } from '../utils/idempotency.js';
 
@@ -77,6 +73,9 @@ export class JARBuilder {
     if (options.loginHint) {
       claims.login_hint = options.loginHint;
     }
+    if (options.maxAge !== undefined) {
+      claims.max_age = options.maxAge;
+    }
     if (options.acrValues) {
       claims.acr_values = options.acrValues;
     }
@@ -111,11 +110,9 @@ export class JARBuilder {
     try {
       return await this.config.signJwt(header, claims);
     } catch (error) {
-      throw new AuthrimError(
-        'jar_signing_error',
-        'Failed to sign JAR request object',
-        { cause: error instanceof Error ? error : undefined }
-      );
+      throw new AuthrimError('jar_signing_error', 'Failed to sign JAR request object', {
+        cause: error instanceof Error ? error : undefined,
+      });
     }
   }
 

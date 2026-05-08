@@ -14,6 +14,40 @@ export type AuthrimSessionProfile =
 
 export type AuthrimWebSdkProfile = 'auto' | 'cookie' | 'token';
 
+export type AuthrimHandoffMethod = 'cookie_session_finalize' | 'dpop_token_verify';
+
+export interface AuthrimWebOriginRegistryEntry {
+  origin: string;
+  client_ids: string[];
+  cors: {
+    allowed: boolean;
+  };
+  csp: {
+    frame_ancestors?: string[];
+  };
+  handoff_allowed: boolean;
+  iframe_allowed: boolean;
+  environment?: string;
+}
+
+export interface AuthrimWebOriginRegistryMetadata {
+  origins: AuthrimWebOriginRegistryEntry[];
+}
+
+export interface AuthrimOidcPromptMetadata {
+  prompt?: string;
+  max_age?: number;
+  acr_values?: string[];
+  amr?: string[];
+  auth_time?: number;
+}
+
+export interface AuthrimLoginChallengeRuntimeMetadata extends AuthrimOidcPromptMetadata {
+  session_mode: AuthrimSessionProfile;
+  handoff_methods: AuthrimHandoffMethod[];
+  web_origin_registry: AuthrimWebOriginRegistryMetadata;
+}
+
 const BROWSER_TOKEN_MATERIAL_FIELDS = new Set([
   'access_token',
   'refresh_token',
