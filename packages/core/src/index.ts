@@ -18,6 +18,15 @@ export {
 
 // Discovery
 export { DiscoveryClient, normalizeIssuer } from './client/discovery.js';
+export {
+  TenantDiscoveryClient,
+  buildDiscoveryRequest,
+  type DiscoveredTenant,
+  type TenantDiscoveryClientOptions,
+  type TenantDiscoveryInput,
+  type TenantDiscoveryMode,
+  type TenantDiscoveryResult,
+} from './client/tenant-discovery.js';
 
 // Provider interfaces
 export {

@@ -77,6 +77,21 @@ describe('Storage Keys', () => {
 
       expect(hash1).not.toBe(hash2);
     });
+
+    it('should isolate same client_id across path-based tenant issuers', async () => {
+      const crypto = createMockCrypto();
+
+      const issuerAHash = await hashForKey(crypto, 'https://auth.example.com/tenant-a');
+      const issuerBHash = await hashForKey(crypto, 'https://auth.example.com/tenant-b');
+      const clientHash = await hashForKey(crypto, 'shared-mobile-client');
+
+      expect(STORAGE_KEYS.tokens(issuerAHash, clientHash)).not.toBe(
+        STORAGE_KEYS.tokens(issuerBHash, clientHash)
+      );
+      expect(STORAGE_KEYS.authStatePrefix(issuerAHash, clientHash)).not.toBe(
+        STORAGE_KEYS.authStatePrefix(issuerBHash, clientHash)
+      );
+    });
   });
 
   describe('Client Initialization - Acceptance Criteria #7', () => {

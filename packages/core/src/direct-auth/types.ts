@@ -676,6 +676,8 @@ export interface DirectAuthClientConfig {
   issuer: string;
   /** OAuth client ID */
   clientId: string;
+  /** Tenant id used by platform SDKs to scope browser-local security material. */
+  tenantId?: string;
   /** Direct Auth execution channel */
   channel?: DirectAuthChannel;
   /** Default redirect URI */
