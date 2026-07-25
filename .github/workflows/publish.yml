@@ -75,6 +75,12 @@ jobs:
       id-token: write # Required for OIDC trusted publishing
 
     steps:
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org'
+
       - name: Download npm package artifact
         uses: actions/download-artifact@v4
         with:
