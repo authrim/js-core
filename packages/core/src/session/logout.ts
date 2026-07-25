@@ -101,8 +101,8 @@ export class LogoutHandler {
   /**
    * Perform logout
    *
-   * 1. Optionally revokes tokens at the authorization server (if revokeTokens=true)
-   * 2. Clears local tokens (always)
+   * 1. Clears local tokens (always)
+   * 2. Optionally revokes the copied tokens at the authorization server (if revokeTokens=true)
    * 3. Emits session:ended event
    * 4. Builds logout URL if IdP supports end_session_endpoint
    *
@@ -118,14 +118,15 @@ export class LogoutHandler {
     const storedIdToken = await this.getStoredIdToken();
     const storedTokens = await this.getStoredTokens();
 
-    // Revoke tokens if requested
+    // Clear local tokens before any network revocation so a slow or stalled
+    // authorization server cannot keep usable tokens in local storage.
+    await this.clearTokens();
+
+    // Revoke copied tokens if requested
     let revocationResult: LogoutResult['revocation'];
     if (options?.revokeTokens && discovery?.revocation_endpoint && storedTokens) {
       revocationResult = await this.revokeTokens(discovery, storedTokens);
     }
-
-    // Clear local tokens
-    await this.clearTokens();
 
     // Emit session ended event
     this.eventEmitter?.emit('session:ended', {

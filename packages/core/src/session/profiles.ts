@@ -50,19 +50,46 @@ export interface AuthrimLoginChallengeRuntimeMetadata extends AuthrimOidcPromptM
 
 const BROWSER_TOKEN_MATERIAL_FIELDS = new Set([
   'access_token',
+  'accessToken',
   'refresh_token',
+  'refreshToken',
   'id_token',
+  'idToken',
   'token',
+  'tokens',
   'tokenSet',
+  'device_secret',
+  'deviceSecret',
 ]);
 
 export function hasBrowserTokenMaterial(value: unknown): boolean {
+  return hasBrowserTokenMaterialAtDepth(value, 0, new WeakSet<object>());
+}
+
+function hasBrowserTokenMaterialAtDepth(
+  value: unknown,
+  depth: number,
+  seen: WeakSet<object>
+): boolean {
   if (!value || typeof value !== 'object') {
     return false;
   }
+  if (seen.has(value)) {
+    return false;
+  }
+  seen.add(value);
 
   for (const key of Object.keys(value)) {
     if (BROWSER_TOKEN_MATERIAL_FIELDS.has(key)) {
+      return true;
+    }
+  }
+
+  if (depth >= 5) {
+    return false;
+  }
+  for (const nested of Object.values(value)) {
+    if (hasBrowserTokenMaterialAtDepth(nested, depth + 1, seen)) {
       return true;
     }
   }

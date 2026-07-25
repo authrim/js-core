@@ -66,7 +66,7 @@ describe('TenantDiscoveryClient', () => {
     );
   });
 
-  it('can use currentHost when a fixed baseUrl is not configured', async () => {
+  it('requires a fixed baseUrl instead of using currentHost as a request destination', async () => {
     const http: HttpClient = {
       fetch: vi.fn().mockResolvedValue({
         ok: true,
@@ -76,20 +76,14 @@ describe('TenantDiscoveryClient', () => {
         data: { result: 'not_found', code: 'tenant_slug_not_found' },
       }),
     };
-    const client = new TenantDiscoveryClient({ http });
 
-    const result = await client.discover({
-      tenantSlug: 'missing',
-      currentHost: 'common.auth.example.com',
-    });
-
-    expect(result).toEqual(
-      expect.objectContaining({ status: 'not_found', code: 'tenant_slug_not_found' })
-    );
-    expect(http.fetch).toHaveBeenCalledWith(
-      'https://common.auth.example.com/api/auth/discovery',
-      expect.any(Object)
-    );
+    expect(
+      () =>
+        new TenantDiscoveryClient({
+          http,
+        } as unknown as ConstructorParameters<typeof TenantDiscoveryClient>[0])
+    ).toThrow(/baseUrl/);
+    expect(http.fetch).not.toHaveBeenCalled();
   });
 
   it('normalizes multiple tenant candidates', async () => {

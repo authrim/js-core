@@ -214,11 +214,12 @@ export class StateManager {
    * @throws AuthrimError if URL is invalid
    */
   private validateReturnTo(returnTo: string, options: ReturnToOptions): string {
+    const hasBackslash = returnTo.includes('\\');
     switch (options.policy) {
       case 'relative_only':
         // Only allow relative paths starting with /
-        // Reject absolute URLs and protocol-relative URLs (//)
-        if (returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+        // Reject absolute URLs, protocol-relative URLs (//), and backslash variants.
+        if (!hasBackslash && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
           // Additional check: ensure no protocol in the path
           if (!returnTo.includes(':')) {
             return returnTo;
@@ -244,14 +245,14 @@ export class StateManager {
           }
 
           // Handle relative URLs
-          if (returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+          if (!hasBackslash && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
             return returnTo;
           }
 
           // Check absolute URL
           const url = new URL(returnTo);
-          if (url.origin === currentOrigin) {
-            return returnTo;
+          if (!hasBackslash && url.origin === currentOrigin) {
+            return url.toString();
           }
         } catch (e) {
           if (e instanceof AuthrimError) throw e;
@@ -271,14 +272,14 @@ export class StateManager {
         }
 
         // Allow relative URLs
-        if (returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+        if (!hasBackslash && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
           return returnTo;
         }
 
         try {
           const parsed = new URL(returnTo);
-          if (options.allowedOrigins.includes(parsed.origin)) {
-            return returnTo;
+          if (!hasBackslash && options.allowedOrigins.includes(parsed.origin)) {
+            return parsed.toString();
           }
         } catch {
           // URL parsing failed

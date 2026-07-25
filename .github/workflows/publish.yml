@@ -9,12 +9,13 @@ on:
       - '.github/workflows/publish.yml'
 
 permissions:
-  id-token: write   # Required for OIDC trusted publishing
   contents: read
 
 jobs:
-  publish:
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.version-check.outputs.should_publish }}
 
     steps:
       - name: Checkout
@@ -55,7 +56,31 @@ jobs:
             echo "✅ Version unchanged: $PACKAGE_VERSION"
           fi
 
-      - name: Publish to npm
+      - name: Upload npm package artifact
         if: steps.version-check.outputs.should_publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-package
+          path: |
+            packages/core/package.json
+            packages/core/README.md
+            packages/core/dist
+
+  publish:
+    needs: build
+    if: needs.build.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC trusted publishing
+
+    steps:
+      - name: Download npm package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: core-package
+          path: packages/core
+
+      - name: Publish to npm
         working-directory: packages/core
         run: npm publish --access public --provenance

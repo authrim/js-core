@@ -10,6 +10,11 @@ export {
   type LogoutHandlerOptions,
 } from './logout.js';
 export {
+  BackChannelLogoutValidator,
+  type BackChannelLogoutValidationOptions,
+  type BackChannelLogoutValidationResult,
+} from './back-channel-logout.js';
+export {
   TokenApiClient,
   type SessionCheckResult,
   type TokenApiClientOptions,

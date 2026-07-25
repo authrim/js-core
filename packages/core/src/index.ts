@@ -169,6 +169,11 @@ export {
   type LogoutHandlerOptions,
 } from './session/logout.js';
 export {
+  BackChannelLogoutValidator,
+  type BackChannelLogoutValidationOptions,
+  type BackChannelLogoutValidationResult,
+} from './session/back-channel-logout.js';
+export {
   TokenApiClient,
   type SessionCheckResult,
   type TokenApiClientOptions,
@@ -456,6 +461,8 @@ export type {
   EmailCodeVerifyResponse,
   DirectAuthTokenRequest,
   DirectAuthTokenResponse,
+  DirectAuthManagedSessionRequest,
+  DirectAuthManagedSessionResponse,
   // WebAuthn JSON
   PublicKeyCredentialRequestOptionsJSON,
   PublicKeyCredentialCreationOptionsJSON,
@@ -473,3 +480,67 @@ export type {
   SessionAuth,
   DirectAuthClient,
 } from './direct-auth/index.js';
+export {
+  DirectAuthBrowserSessionClient,
+  type DirectAuthEmailCodeManagedSessionResult,
+  type DirectAuthBrowserSessionClientOptions,
+  type DirectAuthBrowserEmailCodeSendResponse,
+  type DirectAuthRequestOptions,
+  type DirectoryPasswordLoginInput,
+  type DirectoryPasswordLoginResponse,
+  type DirectoryPasswordMigrationEmailCodeSendInput,
+  type DirectoryPasswordMigrationEmailCodeSendResponse,
+  type DirectoryPasswordMigrationEmailCodeVerifyInput,
+  type DirectoryPasswordMigrationPasskeyOptionsInput,
+  type DirectoryPasswordMigrationPasskeyOptionsResponse,
+  type DirectoryPasswordMigrationPasskeyVerifyInput,
+  type DirectoryPasswordMigrationResponse,
+  type DirectoryPasswordRecoveryResponse,
+  type EmailCodeSendInput,
+  type EmailCodeVerifyInput,
+  type ManagedDirectAuthSessionOptions,
+  type PasskeyFinishInput,
+  type PasskeyLoginStartInput,
+  type PasskeySignupStartInput,
+  type TotpActivateSignupInput,
+  type TotpCredential,
+  type TotpLoginStartResponse,
+  type TotpManagedSessionResponse,
+  type TotpProfile,
+  type TotpSignupOptionsInput,
+  type TotpSignupOptionsResponse,
+  type TotpStartLoginInput,
+  type TotpVerifyLoginInput,
+} from './direct-auth/index.js';
+
+// Flow Runtime
+export {
+  FlowRuntimeClient,
+  getExternalProviderHandleAliases,
+  isRuntimeAuthStep,
+  normalizeRuntimeOutputHandle,
+  readStoredFlowRuntimeState,
+  runtimeAllowsAuthenticationHandle,
+  runtimeAllowsExternalProvider,
+  type FlowRuntimeClientOptions,
+  type FlowRuntimeRequestOptions,
+  type PersistFlowRuntimeStateOptions,
+} from './flow-runtime/index.js';
+export type {
+  FlowRuntimeComponent,
+  FlowRuntimeConsentPolicyContent,
+  FlowRuntimeConsentPolicyItem,
+  FlowRuntimeConsentPolicyOption,
+  FlowRuntimeContract,
+  FlowRuntimeEmailVerificationChallenge,
+  FlowRuntimeFailureBody,
+  FlowRuntimeInteraction,
+  FlowRuntimeStartRequest,
+  FlowRuntimeStartResponse,
+  FlowRuntimeStep,
+  FlowRuntimeSubmitRequest,
+  FlowRuntimeSubmitResponse,
+  RuntimeAuthMethod,
+  RuntimeExternalProviderLike,
+  StoredFlowRuntimeState,
+} from './flow-runtime/index.js';

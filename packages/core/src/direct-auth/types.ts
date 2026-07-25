@@ -532,6 +532,8 @@ export interface DirectAuthManagedSessionRequest {
   code_verifier: string;
   channel: 'browser';
   provider_id?: string;
+  authorization_challenge_id?: string;
+  defer_authorization_continuation?: boolean;
 }
 
 /**
@@ -541,19 +543,28 @@ export interface DirectAuthManagedSessionRequest {
  * refresh, or ID tokens.
  */
 export interface DirectAuthManagedSessionResponse {
-  ok: true;
-  expires_in: number;
+  ok: boolean;
+  expires_in?: number;
   session: {
-    id: string;
+    id?: string;
     userId: string;
     createdAt: number;
     expiresAt: number;
+    authTime?: number;
+    acr?: string;
+    amr?: string[];
   };
   user: {
     id: string;
     email: string;
     name?: string | null;
   };
+  redirect_url?: string;
+  authorization?: {
+    challenge_id: string;
+    type: 'login' | 'reauth' | string;
+  };
+  migration?: unknown;
 }
 
 // =============================================================================

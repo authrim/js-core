@@ -11,11 +11,11 @@ export type TenantDiscoveryMode =
 export interface TenantDiscoveryClientOptions {
   http: HttpClient;
   /**
-   * Authrim issuer or common-entry host. When omitted, currentHost is required
-   * for each discovery call.
+   * Authrim issuer or common-entry host. Required so discovery requests cannot
+   * be redirected by attacker-controlled Host/X-Forwarded-Host values.
    */
-  baseUrl?: string;
-  /** Discovery endpoint path or absolute URL. */
+  baseUrl: string;
+  /** Discovery endpoint path. Absolute URLs are rejected. */
   endpoint?: string;
 }
 
@@ -34,8 +34,8 @@ export interface TenantDiscoveryInput {
   /** Client/application hint for duplicate client_id tenant resolution. */
   appHint?: string;
   /**
-   * Current issuer/common-entry URL or host. Used to build the request URL when
-   * the client was not constructed with a fixed baseUrl.
+   * Deprecated. Discovery requests are always resolved against the configured
+   * baseUrl so request-derived hosts cannot control the destination.
    */
   currentHost?: string;
 }
@@ -89,8 +89,8 @@ export class TenantDiscoveryClient {
 
   constructor(options: TenantDiscoveryClientOptions) {
     this.http = options.http;
-    this.baseUrl = options.baseUrl ? normalizeBaseUrl(options.baseUrl) : undefined;
-    this.endpoint = options.endpoint ?? '/api/auth/discovery';
+    this.baseUrl = normalizeBaseUrl(options.baseUrl);
+    this.endpoint = normalizeEndpoint(options.endpoint ?? '/api/auth/discovery');
   }
 
   async discover(input: TenantDiscoveryInput): Promise<TenantDiscoveryResult> {
@@ -112,17 +112,8 @@ export class TenantDiscoveryClient {
   }
 
   private resolveEndpoint(currentHost?: string): string {
-    if (/^https?:\/\//i.test(this.endpoint)) {
-      return this.endpoint;
-    }
-    const baseUrl = this.baseUrl ?? (currentHost ? normalizeBaseUrl(currentHost) : undefined);
-    if (!baseUrl) {
-      throw new AuthrimError(
-        'configuration_error',
-        'Tenant discovery requires baseUrl or currentHost'
-      );
-    }
-    return `${baseUrl}${this.endpoint.startsWith('/') ? '' : '/'}${this.endpoint}`;
+    void currentHost;
+    return `${this.baseUrl}${this.endpoint}`;
   }
 }
 
@@ -186,11 +177,12 @@ function normalizeDiscoveryResponse(response: RawDiscoveryResponse): TenantDisco
 }
 
 function normalizeCandidate(candidate: RawDiscoveryCandidate): DiscoveredTenant {
+  const loginUrl = normalizeLoginUrl(candidate.login_url);
   return {
     tenantId: candidate.tenant_id,
     tenantCode: candidate.tenant_code,
-    issuer: inferIssuerFromLoginUrl(candidate.login_url),
-    loginUrl: candidate.login_url,
+    issuer: inferIssuerFromLoginUrl(loginUrl),
+    loginUrl,
     displayName: candidate.display_name,
     logoUrl: candidate.logo_url,
     source: candidate.source,
@@ -199,8 +191,42 @@ function normalizeCandidate(candidate: RawDiscoveryCandidate): DiscoveredTenant 
 }
 
 function normalizeBaseUrl(value: string): string {
+  if (!value) {
+    throw new AuthrimError('configuration_error', 'Tenant discovery requires baseUrl');
+  }
   const withScheme = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-  return withScheme.replace(/\/+$/, '');
+  const url = new URL(withScheme);
+  if (url.protocol !== 'https:') {
+    throw new AuthrimError('configuration_error', 'Tenant discovery baseUrl must use https');
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new AuthrimError('configuration_error', 'Tenant discovery baseUrl must be an origin URL');
+  }
+  return url.origin;
+}
+
+function normalizeEndpoint(value: string): string {
+  if (/^[a-z][a-z0-9+.-]*:/i.test(value) || value.startsWith('//') || value.includes('\\')) {
+    throw new AuthrimError(
+      'configuration_error',
+      'Tenant discovery endpoint must be a relative path'
+    );
+  }
+  return value.startsWith('/') ? value : `/${value}`;
+}
+
+function normalizeLoginUrl(value: string): string {
+  const url = new URL(value);
+  if (url.protocol !== 'https:') {
+    throw new AuthrimError('discovery_error', 'Tenant discovery login_url must use https');
+  }
+  if (url.username || url.password) {
+    throw new AuthrimError(
+      'discovery_error',
+      'Tenant discovery login_url must not include userinfo'
+    );
+  }
+  return url.toString();
 }
 
 function inferIssuerFromLoginUrl(loginUrl: string): string {

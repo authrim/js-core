@@ -13,6 +13,7 @@
  */
 
 import type { DebugLogger } from './types.js';
+import type { HttpClient } from '../providers/http.js';
 
 const DEFAULT_MAX_LOGS = 1000;
 const MAX_ALLOWED_LOGS = 10000;
@@ -175,6 +176,9 @@ export interface DiagnosticLoggerOptions {
   /** Server URL for sending logs */
   serverUrl?: string;
 
+  /** HTTP client for sending logs */
+  http?: HttpClient;
+
   /** Client ID for authentication */
   clientId?: string;
 
@@ -204,6 +208,7 @@ export class DiagnosticLogger implements IDiagnosticLogger {
   private serverUrl?: string;
   private clientId?: string;
   private clientSecret?: string;
+  private http?: HttpClient;
   private batchSize: number;
   private flushIntervalMs: number;
 
@@ -224,18 +229,36 @@ export class DiagnosticLogger implements IDiagnosticLogger {
     this.serverUrl = options.serverUrl;
     this.clientId = options.clientId;
     this.clientSecret = options.clientSecret;
+    this.http = options.http;
     this.batchSize = clampInteger(options.batchSize ?? DEFAULT_BATCH_SIZE, 1, MAX_BATCH_SIZE);
     this.flushIntervalMs = options.flushIntervalMs ?? 5000;
 
     // Validate server sending config
-    if (this.sendToServer && (!this.serverUrl || !this.clientId)) {
+    if (this.sendToServer && (!this.serverUrl || !this.clientId || !this.http)) {
       if (this.debugLogger) {
         this.debugLogger.log(
           'warn',
-          '[DIAGNOSTIC] sendToServer is enabled but serverUrl or clientId is missing. Server sending disabled.'
+          '[DIAGNOSTIC] sendToServer is enabled but serverUrl, clientId, or http is missing. Server sending disabled.'
         );
       }
       this.sendToServer = false;
+    } else if (this.sendToServer) {
+      const normalizedServerUrl = normalizeDiagnosticServerUrl(this.serverUrl);
+      if (!normalizedServerUrl) {
+        this.debugLogger?.log(
+          'warn',
+          '[DIAGNOSTIC] sendToServer requires a valid HTTPS serverUrl. Server sending disabled.'
+        );
+        this.sendToServer = false;
+      } else {
+        this.serverUrl = normalizedServerUrl;
+      }
+      if (this.clientSecret) {
+        this.debugLogger?.log(
+          'warn',
+          '[DIAGNOSTIC] clientSecret is not sent with diagnostic logs.'
+        );
+      }
     }
   }
 
@@ -421,7 +444,7 @@ export class DiagnosticLogger implements IDiagnosticLogger {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), DIAGNOSTIC_SEND_TIMEOUT_MS);
     try {
-      const response = await fetch(`${this.serverUrl}/api/v1/diagnostic-logs/ingest`, {
+      const response = await this.http!.fetch(`${this.serverUrl}/api/v1/diagnostic-logs/ingest`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -430,7 +453,6 @@ export class DiagnosticLogger implements IDiagnosticLogger {
         body: JSON.stringify({
           logs: logsToSend,
           client_id: this.clientId,
-          client_secret: this.clientSecret,
         }),
         signal: controller.signal,
       });
@@ -504,6 +526,25 @@ function clampInteger(value: number, min: number, max: number): number {
     return min;
   }
   return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+function normalizeDiagnosticServerUrl(value: string | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') {
+      return null;
+    }
+    url.username = '';
+    url.password = '';
+    url.search = '';
+    url.hash = '';
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return null;
+  }
 }
 
 /**

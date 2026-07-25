@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DiagnosticLogger } from '../../src/debug/diagnostic-logger.js';
+import type { HttpClient } from '../../src/providers/http.js';
 
 describe('DiagnosticLogger', () => {
   afterEach(() => {
@@ -8,14 +9,20 @@ describe('DiagnosticLogger', () => {
   });
 
   it('clamps server-send batch size to a bounded maximum', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 204,
+      statusText: 'No Content',
+      headers: {},
+      data: undefined,
+    }));
 
     const logger = new DiagnosticLogger({
       enabled: true,
       sendToServer: true,
       serverUrl: 'https://auth.example.com',
       clientId: 'client_123',
+      http: { fetch: fetchMock } as unknown as HttpClient,
       batchSize: 100000,
     });
 
@@ -32,25 +39,23 @@ describe('DiagnosticLogger', () => {
   it('aborts diagnostic send requests after the fixed timeout', async () => {
     vi.useFakeTimers();
     let capturedSignal: AbortSignal | undefined;
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
-        capturedSignal = init?.signal;
-        return new Promise<Response>((_resolve, reject) => {
-          capturedSignal?.addEventListener('abort', () => {
-            const error = new Error('aborted');
-            error.name = 'AbortError';
-            reject(error);
-          });
+    const fetchMock = vi.fn((_input: string, init?: { signal?: AbortSignal }) => {
+      capturedSignal = init?.signal;
+      return new Promise((_resolve, reject) => {
+        capturedSignal?.addEventListener('abort', () => {
+          const error = new Error('aborted');
+          error.name = 'AbortError';
+          reject(error);
         });
-      })
-    );
+      });
+    });
 
     const logger = new DiagnosticLogger({
       enabled: true,
       sendToServer: true,
       serverUrl: 'https://auth.example.com',
       clientId: 'client_123',
+      http: { fetch: fetchMock } as unknown as HttpClient,
       batchSize: 1,
     });
 

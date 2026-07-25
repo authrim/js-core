@@ -482,7 +482,7 @@ export class AuthorizationCodeFlow {
 
       // 2. Audience check: aud MUST contain client_id (§3.1.3.7 #3)
       const aud = claims.aud;
-      const audList = Array.isArray(aud) ? aud : [aud];
+      const audList = Array.isArray(aud) ? aud : typeof aud === 'string' ? [aud] : [];
       if (!audList.includes(this.clientId)) {
         this.diagnosticLogger?.logTokenValidation({
           step: 'audience-check',
@@ -505,8 +505,35 @@ export class AuthorizationCodeFlow {
         actual: audList,
       });
 
-      // 3. Expiry check: current time MUST be before exp (§3.1.3.7 #9)
+      const azp = claims.azp;
+      if (azp !== undefined && azp !== this.clientId) {
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'audience-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: this.clientId,
+          actual: azp,
+          errorMessage: 'ID token authorized party does not match client_id',
+        });
+        throw new AuthrimError(
+          'invalid_audience',
+          `ID token authorized party does not match client_id "${this.clientId}"`
+        );
+      }
+
+      // 3. Expiry check: exp MUST be present and current time MUST be before exp (§3.1.3.7 #9)
       const now = Math.floor(Date.now() / 1000);
+      if (typeof claims.exp !== 'number' || !Number.isFinite(claims.exp)) {
+        this.diagnosticLogger?.logTokenValidation({
+          step: 'expiry-check',
+          tokenType: 'id_token',
+          result: 'fail',
+          expected: 'numeric exp claim',
+          actual: claims.exp,
+          errorMessage: 'ID token exp claim is required',
+        });
+        throw new AuthrimError('invalid_id_token', 'ID token exp claim is required');
+      }
       if (isJwtExpired(claims)) {
         this.diagnosticLogger?.logTokenValidation({
           step: 'expiry-check',
@@ -524,6 +551,10 @@ export class AuthorizationCodeFlow {
         result: 'pass',
         actual: claims.exp,
       });
+
+      if (typeof claims.iat !== 'number' || !Number.isFinite(claims.iat)) {
+        throw new AuthrimError('invalid_id_token', 'ID token iat claim is required');
+      }
 
       // OIDC Core §3.1.2.1: max_age requires an auth_time claim and freshness check.
       if (options.maxAge !== undefined) {

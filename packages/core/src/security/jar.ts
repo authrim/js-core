@@ -97,6 +97,10 @@ export class JARBuilder {
         'exp',
         'jti',
         'nbf',
+        'prompt',
+        'login_hint',
+        'max_age',
+        'acr_values',
       ]);
 
       for (const [key, value] of Object.entries(options.extraClaims)) {
