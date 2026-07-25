@@ -177,6 +177,54 @@ describe('DirectAuthBrowserSessionClient', () => {
     );
   });
 
+  it('keeps email code state after a failed verify so the attempt can be retried', async () => {
+    let verifyCount = 0;
+    http.setHandler((url, options) => {
+      if (url.endsWith('/email-code/send')) {
+        return {
+          ok: true,
+          status: 200,
+          data: { attempt_id: 'attempt-1', expires_in: 300, masked_email: 'u***@example.com' },
+        };
+      }
+      if (url.endsWith('/email-code/verify')) {
+        verifyCount += 1;
+        const body = readBody(options?.body);
+        expect(body.attempt_id).toBe('attempt-1');
+        if (verifyCount === 1) {
+          return {
+            ok: false,
+            status: 400,
+            data: { error: 'invalid_code', error_description: 'Invalid code' },
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          data: { direct_auth_artifact: 'artifact-1', expires_in: 60, is_new_user: false },
+        };
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+
+    await client.sendEmailCode({ email: 'user@example.com' });
+    await expect(
+      client.verifyEmailCode({ email: 'user@example.com', code: '000000' })
+    ).rejects.toThrow(/Invalid code/);
+    expect(storage.getAllKeys()).toContain(
+      'authrim:direct-auth:login-ui-client:email-code:user%40example.com'
+    );
+
+    await expect(
+      client.verifyEmailCode({ email: 'user@example.com', code: '123456' })
+    ).resolves.toMatchObject({
+      direct_auth_artifact: 'artifact-1',
+    });
+    expect(storage.getAllKeys()).not.toContain(
+      'authrim:direct-auth:login-ui-client:email-code:user%40example.com'
+    );
+  });
+
   it('finalizes managed session when email code send returns a direct auth artifact', async () => {
     let sessionBody: Record<string, unknown> | undefined;
     http.setHandler((url, options) => {

@@ -543,19 +543,24 @@ export class DirectAuthBrowserSessionClient {
     input: EmailCodeVerifyInput,
     options?: DirectAuthRequestOptions
   ): Promise<EmailCodeVerifyResponse> {
-    const state = await this.consumeEmailCodeState(input.email);
-    return this.request<EmailCodeVerifyResponse>('/api/v1/auth/direct/email-code/verify', {
-      method: 'POST',
-      headers: jsonHeaders(options?.headers),
-      body: JSON.stringify({
-        attempt_id: state.attemptId,
-        code: input.code,
-        code_verifier: state.codeVerifier,
-        channel: this.channel,
-      }),
-      signal: options?.signal,
-      timeout: options?.timeout,
-    });
+    const state = await this.readEmailCodeState(input.email);
+    const response = await this.request<EmailCodeVerifyResponse>(
+      '/api/v1/auth/direct/email-code/verify',
+      {
+        method: 'POST',
+        headers: jsonHeaders(options?.headers),
+        body: JSON.stringify({
+          attempt_id: state.attemptId,
+          code: input.code,
+          code_verifier: state.codeVerifier,
+          channel: this.channel,
+        }),
+        signal: options?.signal,
+        timeout: options?.timeout,
+      }
+    );
+    await this.clearEmailCodeState(input.email);
+    return response;
   }
 
   async verifyEmailCodeWithManagedSession(
@@ -563,7 +568,7 @@ export class DirectAuthBrowserSessionClient {
     sessionOptions: ManagedDirectAuthSessionOptions = {},
     requestOptions?: DirectAuthRequestOptions
   ): Promise<DirectAuthManagedSessionResponse> {
-    const state = await this.consumeEmailCodeState(input.email);
+    const state = await this.readEmailCodeState(input.email);
     const finish = await this.request<EmailCodeVerifyResponse>(
       '/api/v1/auth/direct/email-code/verify',
       {
@@ -579,6 +584,7 @@ export class DirectAuthBrowserSessionClient {
         timeout: requestOptions?.timeout,
       }
     );
+    await this.clearEmailCodeState(input.email);
     return this.finalizeManagedSession(
       finish.direct_auth_artifact,
       state.codeVerifier,
@@ -855,10 +861,9 @@ export class DirectAuthBrowserSessionClient {
     );
   }
 
-  private async consumeEmailCodeState(email: string): Promise<DirectEmailCodeState> {
+  private async readEmailCodeState(email: string): Promise<DirectEmailCodeState> {
     const key = this.stateKey('email-code', normalizeEmail(email));
     const raw = await this.storage.get(key);
-    await this.storage.remove(key);
     const state = readEmailCodeState(raw);
     if (!state) {
       throw new AuthrimError('invalid_state', 'Email code state is missing or expired');
