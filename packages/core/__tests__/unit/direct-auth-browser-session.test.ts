@@ -225,6 +225,40 @@ describe('DirectAuthBrowserSessionClient', () => {
     );
   });
 
+  it('does not clear a newer email code state when an older verify completes', async () => {
+    const emailCodeStateKey = 'authrim:direct-auth:login-ui-client:email-code:user%40example.com';
+    http.setHandler((url, options) => {
+      if (url.endsWith('/email-code/send')) {
+        return {
+          ok: true,
+          status: 200,
+          data: { attempt_id: 'attempt-1', expires_in: 300, masked_email: 'u***@example.com' },
+        };
+      }
+      if (url.endsWith('/email-code/verify')) {
+        const body = readBody(options?.body);
+        expect(body.attempt_id).toBe('attempt-1');
+        storage.store.set(
+          emailCodeStateKey,
+          JSON.stringify({ attemptId: 'attempt-2', codeVerifier: 'new-code-verifier' })
+        );
+        return {
+          ok: true,
+          status: 200,
+          data: { direct_auth_artifact: 'artifact-1', expires_in: 60, is_new_user: false },
+        };
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+
+    await client.sendEmailCode({ email: 'user@example.com' });
+    await client.verifyEmailCode({ email: 'user@example.com', code: '123456' });
+
+    expect(storage.store.get(emailCodeStateKey)).toBe(
+      JSON.stringify({ attemptId: 'attempt-2', codeVerifier: 'new-code-verifier' })
+    );
+  });
+
   it('finalizes managed session when email code send returns a direct auth artifact', async () => {
     let sessionBody: Record<string, unknown> | undefined;
     http.setHandler((url, options) => {

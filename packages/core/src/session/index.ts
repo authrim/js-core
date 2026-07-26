@@ -11,6 +11,8 @@ export {
 } from './logout.js';
 export {
   BackChannelLogoutValidator,
+  type BackChannelLogoutTokenVerifier,
+  type BackChannelLogoutValidatorConfig,
   type BackChannelLogoutValidationOptions,
   type BackChannelLogoutValidationResult,
 } from './back-channel-logout.js';

@@ -170,6 +170,8 @@ export {
 } from './session/logout.js';
 export {
   BackChannelLogoutValidator,
+  type BackChannelLogoutTokenVerifier,
+  type BackChannelLogoutValidatorConfig,
   type BackChannelLogoutValidationOptions,
   type BackChannelLogoutValidationResult,
 } from './session/back-channel-logout.js';

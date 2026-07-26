@@ -559,7 +559,7 @@ export class DirectAuthBrowserSessionClient {
         timeout: options?.timeout,
       }
     );
-    await this.clearEmailCodeState(input.email);
+    await this.clearEmailCodeStateIfCurrent(input.email, state);
     return response;
   }
 
@@ -584,7 +584,7 @@ export class DirectAuthBrowserSessionClient {
         timeout: requestOptions?.timeout,
       }
     );
-    await this.clearEmailCodeState(input.email);
+    await this.clearEmailCodeStateIfCurrent(input.email, state);
     return this.finalizeManagedSession(
       finish.direct_auth_artifact,
       state.codeVerifier,
@@ -869,6 +869,21 @@ export class DirectAuthBrowserSessionClient {
       throw new AuthrimError('invalid_state', 'Email code state is missing or expired');
     }
     return state;
+  }
+
+  private async clearEmailCodeStateIfCurrent(
+    email: string,
+    expected: DirectEmailCodeState
+  ): Promise<void> {
+    const key = this.stateKey('email-code', normalizeEmail(email));
+    const current = readEmailCodeState(await this.storage.get(key));
+    if (
+      current &&
+      current.attemptId === expected.attemptId &&
+      current.codeVerifier === expected.codeVerifier
+    ) {
+      await this.storage.remove(key);
+    }
   }
 
   private async persistState(

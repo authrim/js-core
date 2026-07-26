@@ -11,24 +11,72 @@ export interface BackChannelLogoutValidationOptions {
   now?: number;
 }
 
+export type BackChannelLogoutTokenVerifier = (
+  logoutToken: string,
+  options: Pick<BackChannelLogoutValidationOptions, 'issuer' | 'clientId'>
+) => Promise<LogoutTokenClaims & Record<string, unknown>>;
+
+export interface BackChannelLogoutValidatorConfig {
+  /**
+   * Verifies the logout token signature and returns the verified claims.
+   *
+   * Implementations should use the issuer's JWKS and reject unsupported
+   * algorithms before returning claims.
+   */
+  verifyJwt: BackChannelLogoutTokenVerifier;
+}
+
 export interface BackChannelLogoutValidationResult {
   claims: LogoutTokenClaims;
 }
 
 export class BackChannelLogoutValidator {
-  validate(
+  constructor(private readonly config: BackChannelLogoutValidatorConfig) {
+    if (!config?.verifyJwt) {
+      throw new AuthrimError(
+        'configuration_error',
+        'BackChannelLogoutValidator requires a logout token signature verifier'
+      );
+    }
+  }
+
+  async validate(
     logoutToken: string,
     options: BackChannelLogoutValidationOptions
-  ): BackChannelLogoutValidationResult {
+  ): Promise<BackChannelLogoutValidationResult> {
     let claims: LogoutTokenClaims & Record<string, unknown>;
     try {
-      claims = decodeJwt<LogoutTokenClaims & Record<string, unknown>>(logoutToken).payload;
+      const decoded = decodeJwt<LogoutTokenClaims & Record<string, unknown>>(logoutToken);
+      if (!decoded.header.alg || decoded.header.alg.toLowerCase() === 'none') {
+        throw new AuthrimError('invalid_token', 'Logout token uses an unsupported algorithm');
+      }
+      if (!decoded.signature) {
+        throw new AuthrimError('invalid_token', 'Logout token signature is required');
+      }
+      claims = await this.config.verifyJwt(logoutToken, {
+        issuer: options.issuer,
+        clientId: options.clientId,
+      });
     } catch (error) {
-      throw new AuthrimError('invalid_token', 'Failed to decode logout token', {
+      if (error instanceof AuthrimError) {
+        throw error;
+      }
+      throw new AuthrimError('invalid_token', 'Failed to verify logout token', {
         cause: error instanceof Error ? error : undefined,
       });
     }
 
+    return this.validateClaims(claims, options);
+  }
+
+  /**
+   * Validate claims that have already passed logout token signature verification.
+   */
+
+  validateClaims(
+    claims: LogoutTokenClaims & Record<string, unknown>,
+    options: BackChannelLogoutValidationOptions
+  ): BackChannelLogoutValidationResult {
     if (claims.iss !== options.issuer) {
       throw new AuthrimError(
         'invalid_issuer',
