@@ -48,6 +48,16 @@ export interface PasskeySignupStartInput {
   scope?: string;
   authorizationChallengeId?: string;
   humanVerificationResponse?: string;
+  /**
+   * A tenant invitation token. The server reserves one use for this sign-up and applies the
+   * invitation to the account it creates.
+   */
+  inviteToken?: string;
+  /**
+   * Proof of the email the invitation names, from the invitation email-verification step, when
+   * the tenant requires that email to be proved.
+   */
+  invitationEmailProof?: string;
 }
 
 export interface PasskeyFinishInput<TCredential> {
@@ -122,6 +132,16 @@ export interface TotpSignupOptionsInput {
   customFields?: Record<string, unknown>;
   authorizationChallengeId?: string;
   humanVerificationResponse?: string;
+  /**
+   * A tenant invitation token. The server reserves one use for this sign-up and applies the
+   * invitation to the account it creates.
+   */
+  inviteToken?: string;
+  /**
+   * Proof of the email the invitation names, from the invitation email-verification step, when
+   * the tenant requires that email to be proved.
+   */
+  invitationEmailProof?: string;
 }
 
 export interface TotpActivateSignupInput {
@@ -422,6 +442,8 @@ export class DirectAuthBrowserSessionClient {
           scope: input.scope,
           authorization_challenge_id: input.authorizationChallengeId,
           human_verification_response: input.humanVerificationResponse,
+          invite_token: input.inviteToken,
+          invitation_email_proof: input.invitationEmailProof,
         }),
         signal: options?.signal,
         timeout: options?.timeout,
@@ -675,6 +697,8 @@ export class DirectAuthBrowserSessionClient {
         custom_fields: input.customFields,
         authorization_challenge_id: input.authorizationChallengeId,
         human_verification_response: input.humanVerificationResponse,
+        invite_token: input.inviteToken,
+        invitation_email_proof: input.invitationEmailProof,
       }),
       signal: options?.signal,
       timeout: options?.timeout,
