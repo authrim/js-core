@@ -326,6 +326,61 @@ describe('DirectAuthBrowserSessionClient', () => {
     );
   });
 
+  it('sends an invitation and the proof of its email with a passkey signup start', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    http.setHandler((url, options) => {
+      expect(url).toBe(`${issuer}/api/v1/auth/direct/passkey/signup/start`);
+      bodies.push(readBody(options?.body));
+      return {
+        ok: true,
+        status: 200,
+        data: { challenge_id: `signup-${bodies.length}`, options: { challenge: 'abc' } },
+      };
+    });
+
+    await client.startPasskeySignup({
+      email: 'invited@example.com',
+      inviteToken: 'invite-token',
+      invitationEmailProof: 'proof-value',
+    });
+    await client.startPasskeySignup({ email: 'plain@example.com' });
+
+    expect(bodies[0]).toMatchObject({
+      invite_token: 'invite-token',
+      invitation_email_proof: 'proof-value',
+    });
+    expect(bodies[1]).not.toHaveProperty('invite_token');
+    expect(bodies[1]).not.toHaveProperty('invitation_email_proof');
+  });
+
+  it('sends an invitation and the proof of its email with a TOTP signup start', async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    http.setHandler((url, options) => {
+      expect(url).toBe(`${issuer}/api/auth/totp/signup/options`);
+      bodies.push(readBody(options?.body));
+      return {
+        ok: true,
+        status: 201,
+        data: { challenge_id: 'totp-signup-1', secret: 'S', otpauth_uri: 'otpauth://x' },
+      };
+    });
+
+    await client.createTotpSignupOptions({
+      email: 'invited@example.com',
+      inviteToken: 'invite-token',
+      invitationEmailProof: 'proof-value',
+    });
+    await client.createTotpSignupOptions({ email: 'plain@example.com' });
+
+    expect(bodies[0]).toMatchObject({
+      email: 'invited@example.com',
+      invite_token: 'invite-token',
+      invitation_email_proof: 'proof-value',
+    });
+    expect(bodies[1]).not.toHaveProperty('invite_token');
+    expect(bodies[1]).not.toHaveProperty('invitation_email_proof');
+  });
+
   it('wraps TOTP login endpoints', async () => {
     http.setHandler((url, options) => {
       if (url.endsWith('/totp/login/start')) {
